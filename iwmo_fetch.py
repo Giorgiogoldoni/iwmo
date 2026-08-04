@@ -218,9 +218,19 @@ def main():
     bench_closes = [round(float(c),4) for c in bench['Close'].tolist()]
     bench_dates  = [ts.strftime('%Y-%m-%d') for ts in bench.index]
 
-    def calc_relative_strength(closes, dates, bench_closes, bench_dates):
-        """Rendimento relativo IWMO/SWDA a 3M/6M/12M (~63/126/252 giorni di
-        borsa), allineando le due serie per data."""
+    # ── BENCHMARK IWVL.MI (rotazione momentum vs value, tab Regime) ─────
+    print("Scarico iShares Edge MSCI World Value Factor UCITS ETF (IWVL.MI) come benchmark...")
+    value = yf.download("IWVL.MI", start="2014-01-01", interval="1d",
+                         auto_adjust=True, progress=False)
+    if hasattr(value.columns, 'levels'):
+        value.columns = value.columns.get_level_values(0)
+    value_closes = [round(float(c),4) for c in value['Close'].tolist()]
+    value_dates  = [ts.strftime('%Y-%m-%d') for ts in value.index]
+
+    def calc_relative_strength(closes, dates, bench_closes, bench_dates, with_series=False):
+        """Rendimento relativo a 3M/6M/12M (~63/126/252 giorni di borsa),
+        allineando le due serie per data. Se with_series=True include anche
+        la serie storica completa del rapporto (per grafico)."""
         bench_by_date = dict(zip(bench_dates, bench_closes))
         common_dates = [d for d in dates if d in bench_by_date]
         if not common_dates:
@@ -237,6 +247,9 @@ def main():
                 out[f'ret_{label}'] = None
         out['verdetto'] = ('SOVRAPERFORMA' if (out.get('ret_3m') or 0) > 0
                             else 'SOTTOPERFORMA')
+        if with_series:
+            out['series_dates']  = common_dates[-756:]
+            out['series_values'] = [round(v,5) for v in ordered[-756:]]
         return out
 
     # ── ANALISI COMPLETA (MORNING + CLOSE) ─────────────
@@ -277,6 +290,7 @@ def main():
 
         # Forza relativa vs benchmark (sostituisce Antonacci)
         rel_strength = calc_relative_strength(etp_closes, etp_dates, bench_closes, bench_dates)
+        rel_strength_value = calc_relative_strength(etp_closes, etp_dates, value_closes, value_dates, with_series=True)
 
         # Indicatori RAPTOR su ETF
         etp_kama_fast = calc_kama(etp_closes, n=5,  fast=3, slow=20)
@@ -300,6 +314,7 @@ def main():
 
             'stagionalita': stagionalita,
             'rel_strength': rel_strength,
+            'rel_strength_value': rel_strength_value,
 
             'etp': {
                 'dates':     etp_dates,
