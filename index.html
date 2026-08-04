@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>⚙️ RAPTOR IWMO</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700;800&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#fff;--bg2:#f8f9fa;--bg3:#f1f3f5;
@@ -56,14 +57,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
 /* SECTION */
 .section-title{font-family:var(--font-cond);font-size:15px;font-weight:700;letter-spacing:1px;color:var(--text);margin:20px 0 10px;display:flex;align-items:center;gap:8px;padding-bottom:6px;border-bottom:2px solid var(--border)}
 
-/* ANTONACCI BOX */
-.ant-box{border-radius:8px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px}
-.ant-box.buy{background:#d3f9d8;border:2px solid var(--green)}
-.ant-box.out{background:#ffe3e3;border:2px solid var(--red)}
-.ant-signal{font-family:var(--font-cond);font-size:28px;font-weight:800;letter-spacing:2px}
-.ant-buy{color:var(--green)}.ant-out{color:var(--red)}
-.ant-detail{font-size:11px;color:var(--text2);line-height:1.6}
-
 /* CHART WRAPPER */
 .chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:16px}
 .chart-label{font-size:9px;color:var(--text3);font-family:var(--font-cond);letter-spacing:.5px;padding:6px 12px}
@@ -86,14 +79,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
   <div class="logo">⚙️ RAPTOR<span> IWMO</span></div>
   <div class="spacer"></div>
   <span class="ts" id="tsLabel">—</span>
+  <a class="btn-top" href="regole.pdf" target="_blank" rel="noopener">📄 Regole</a>
+  <button class="btn-top" id="btnExcel" onclick="dlExcel()">⬇ Excel</button>
   <a class="btn-top" href="https://giorgiogoldoni.github.io/raptor-leva/RAPTOR_Leva.html">⚡ Leva</a>
   <a class="btn-top" href="https://giorgiogoldoni.github.io/raptor-portafoglio/portafoglio.html">📋 Portafoglio</a>
 </div>
 
 <div class="tabs">
   <div class="tab act" onclick="setTab('stag')"    id="tab-stag">📊 Stagionalità</div>
-  <div class="tab"     onclick="setTab('ant')"     id="tab-ant">⚡ Antonacci</div>
+  <div class="tab"     onclick="setTab('regime')"  id="tab-regime">🧭 Regime</div>
   <div class="tab"     onclick="setTab('etp')"     id="tab-etp">📈 IWMO ETF</div>
+  <div class="tab"     onclick="setTab('segnali')" id="tab-segnali">📈 Grafico Segnali</div>
 </div>
 
 <div id="autoComment" class="comment-bar"></div>
@@ -125,20 +121,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
   </div>
 </div>
 
-<!-- TAB ANTONACCI -->
-<div class="panel" id="panel-ant">
-  <div class="section-title">⚡ Dual Momentum Antonacci — Segnale attuale</div>
-  <div id="antBox"></div>
-  <div class="section-title">📊 Storico segnali Antonacci su IWMO (12 mesi)</div>
-  <div class="chart-wrap">
-    <div class="chart-label">Verde = BUY (momentum positivo) · Rosso = OUT · Linea = prezzo</div>
-    <div id="antChart"></div>
-  </div>
-  <div class="section-title">📈 Antonacci su IWMO ETF</div>
-  <div class="chart-wrap">
-    <div class="chart-label">Momentum assoluto 12 mesi su IWMO · Verde = BUY · Rosso = OUT</div>
-    <div id="antEtpChart"></div>
-  </div>
+<!-- TAB REGIME -->
+<div class="panel" id="panel-regime">
+  <div class="section-title">🧭 Regime di mercato (fonte: scannerv2)</div>
+  <div id="regimeBox" class="kpi-row"></div>
+  <div class="section-title">📐 Forza relativa vs benchmark (IWMO / SWDA.MI)</div>
+  <div id="relStrengthBox" class="kpi-row"></div>
+  <div style="font-size:11px;color:var(--text3);margin-top:-8px">Rendimento del rapporto IWMO/SWDA — se positivo, il fattore momentum sta sovraperformando il mercato generale; se negativo, lo sta sottoperformando.</div>
 </div>
 
 <!-- TAB IWMO ETF -->
@@ -154,10 +143,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
     <div class="chart-label">AO (EMA3−EMA13) · RSI14 arancio · RSI5 blu tratteggiato</div>
     <div id="etpRsiChart"></div>
   </div>
-  <div class="section-title">📍 Supporti storici IWMO</div>
+  <div class="section-title">📍 Supporti storici IWMO — top 5 più significativi</div>
   <div id="etpSupports"></div>
 </div>
 
+<!-- TAB GRAFICO SEGNALI (widget etp) -->
+<div class="panel" id="panel-segnali">
+  <div class="section-title">📈 Grafico Segnali completo — BUY1/2/3, EXIT1/2, MEAN REV, WATCH</div>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Componente condiviso con il repository <b>etp</b>: stessa logica di segnale, storia completa, selettore timeframe e suggerimento uscita ML.</p>
+  <button onclick="openChartModal('IWMO','iShares MSCI World Momentum')" style="font-family:var(--font-cond);font-size:13px;font-weight:700;letter-spacing:.5px;padding:10px 20px;background:var(--iwmo);color:#fff;border:none;border-radius:6px;cursor:pointer">📈 Apri Grafico Segnali IWMO</button>
+</div>
+
+<script>const CHART_BASE = 'https://giorgiogoldoni.github.io/etp/data/charts/';</script>
+<script src="chart_widget.js"></script>
 <script>
 const DATA_URL = 'https://raw.githubusercontent.com/Giorgiogoldoni/iwmo/main/iwmo.json';
 let D = null;
@@ -180,9 +178,9 @@ async function init() {
     document.querySelectorAll('.panel')[0].classList.add('visible');
     document.getElementById('tsLabel').textContent = D.updated_display || '';
     renderStagionalita();
-    renderAntonacci();
     renderEtp();
     renderAutoComment();
+    renderRegime();
   } catch(e) {
     document.getElementById('loading').textContent = '❌ ' + e.message + ' — eseguire prima il workflow fetch';
   }
@@ -268,9 +266,9 @@ function renderAutoComment() {
   }
 
   let macroTxt='';
-  const al = D.antonacci_latest || D.antonacci_fut?.filter(a=>a)?.at(-1);
-  if(al){
-    macroTxt = ` Momentum 12 mesi ${al.ret_12m>0?'+':''}${al.ret_12m}% (${al.ret_12m>0?'favorevole':'sfavorevole'}).`;
+  const rs = D.rel_strength;
+  if(rs && rs.ret_3m!=null){
+    macroTxt = ` Forza relativa vs SWDA 3M: ${rs.ret_3m>0?'+':''}${rs.ret_3m}% (${rs.verdetto?.toLowerCase()||''}).`;
   }
 
   document.getElementById('autoComment').innerHTML =
@@ -561,55 +559,38 @@ function drawRenkoFut(fut) {
   document.getElementById('renkoChart').appendChild(svg);
 }
 
-// ── ANTONACCI ────────────────────────────────────
-function renderAntonacci() {
-  const al = D.antonacci_latest || D.antonacci_fut?.at(-1);
-  const wl = D.antonacci_etp_latest || D.antonacci_etp?.at(-1);
-  const isBuy = al && al.signal === 'BUY';
+// ── REGIME (Hurst/ADX/regime da scannerv2 + forza relativa) ──
+async function renderRegime() {
+  // Forza relativa — dato già presente in iwmo.json
+  const rs = D.rel_strength;
+  document.getElementById('relStrengthBox').innerHTML = rs ? [
+    {l:'IWMO/SWDA 3M',v:rs.ret_3m!=null?(rs.ret_3m>0?'+':'')+rs.ret_3m+'%':'—',c:rs.ret_3m>0?'green':'red'},
+    {l:'IWMO/SWDA 6M',v:rs.ret_6m!=null?(rs.ret_6m>0?'+':'')+rs.ret_6m+'%':'—',c:rs.ret_6m>0?'green':'red'},
+    {l:'IWMO/SWDA 12M',v:rs.ret_12m!=null?(rs.ret_12m>0?'+':'')+rs.ret_12m+'%':'—',c:rs.ret_12m>0?'green':'red'},
+    {l:'Verdetto',v:rs.verdetto||'—',s:'vs benchmark',c:rs.verdetto==='SOVRAPERFORMA'?'green':'red'},
+  ].map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s||''}</div></div>`).join('')
+   : '<div style="color:#868e96;font-size:11px;padding:8px">Dati forza relativa non disponibili — eseguire il fetch aggiornato.</div>';
 
-  document.getElementById('antBox').innerHTML = `
-    <div class="ant-box ${isBuy?'buy':'out'}">
-      <div class="ant-signal ${isBuy?'ant-buy':'ant-out'}">${isBuy?'🟢 BUY':'🔴 OUT'}</div>
-      <div class="ant-detail">
-        <strong>Momentum IWMO 12 mesi: ${al?(al.ret_12m>0?'+':'')+al.ret_12m+'%':'—'}</strong><br>
-        Prezzo attuale: ${al?al.price:'-'} <br>
-        Regola Antonacci: se rendimento 12 mesi > 0 → BUY · se < 0 → OUT<br>
-        <br>
-        <strong>IWMO ETF momentum 12 mesi: ${wl?(wl.ret_12m>0?'+':'')+wl.ret_12m+'% ('+wl.signal+')':'—'}</strong>
-      </div>
-    </div>`;
-
-  const data = D.antonacci_fut || D.antonacci_etp;
-  if(data && data.length) {
-    const W=700, H=140, PAD={l:54,r:20,t:8,b:20};
-    const PW=W-PAD.l-PAD.r, PH=H-PAD.t-PAD.b;
-    const N=data.length;
-    const prices=data.map(d=>d.price).filter(v=>v);
-    const mn=Math.min(...prices)*.995, mx=Math.max(...prices)*1.005;
-    const svg=svgEl('svg',{width:W,height:H,style:'display:block;background:#fff'});
-    const xPos=i=>PAD.l+(i/Math.max(N-1,1))*PW;
-    const sy=v=>scY(v,mn,mx,PAD.t,PH);
-
-    svgEl('rect',{x:PAD.l,y:PAD.t,width:PW,height:PH,fill:'#f8f9fa'},svg);
-
-    let prevSig=null, segStart=0;
-    data.forEach((d,i)=>{
-      if(d.signal!==prevSig || i===N-1) {
-        if(prevSig && i>segStart) {
-          svgEl('rect',{x:xPos(segStart).toFixed(1),y:PAD.t,
-            width:(xPos(i)-xPos(segStart)).toFixed(1),height:PH,
-            fill:prevSig==='BUY'?'#2f9e44':'#c92a2a',opacity:'.08'},svg);
-        }
-        segStart=i; prevSig=d.signal;
-      }
-    });
-
-    poly(data.map((d,i)=>d.price?[xPos(i),sy(d.price)]:null).filter(Boolean),svg,'#343a40',1.8);
-
-    const step=Math.max(1,Math.floor(N/8));
-    for(let i=0;i<N;i+=step) if(data[i]) txt(xPos(i),H-PAD.b+10,data[i].date.slice(0,7),'#adb5bd',7,'middle',svg);
-
-    document.getElementById('antChart').appendChild(svg);
+  // Regime/Hurst/ADX — fetch da scannerv2 (unica fonte che li calcola)
+  try {
+    const r = await fetch('https://giorgiogoldoni.github.io/scannerv2/data/signals.json?t='+Date.now());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const json = await r.json();
+    const d = (json.signals||[]).find(s=>s.ticker==='IWMO.MI');
+    if(!d) throw new Error('IWMO.MI non presente nell\'universo scannerv2');
+    const regCode = d.regime?.code || d.regime;
+    const regLabel = d.regime?.label || d.regime || '—';
+    const h60Color = d.hurst_60>0.55?'green':d.hurst_60<0.45?'iwmo':'';
+    const h1yColor = d.hurst_1y>0.55?'green':d.hurst_1y<0.45?'iwmo':'';
+    const adxColor = d.adx>=25?'green':d.adx>=20?'orange':'';
+    document.getElementById('regimeBox').innerHTML = [
+      {l:'Regime',v:regLabel,s:regCode||'',c:regCode==='RIBASSO'?'red':regCode==='SLANCIO'||regCode==='SALITA'?'green':''},
+      {l:'Memoria recente (Hurst 60g)',v:d.hurst_60!=null?d.hurst_60.toFixed(3):'—',s:d.hurst_60>0.55?'tende a trendare':d.hurst_60<0.45?'tende a rimbalzare':'neutro',c:h60Color},
+      {l:'Carattere annuale (Hurst 1y)',v:d.hurst_1y!=null?d.hurst_1y.toFixed(3):'—',s:d.hurst_1y>0.55?'struttura trending':d.hurst_1y<0.45?'struttura oscillante':'neutro',c:h1yColor},
+      {l:'ADX(14) — forza',v:d.adx!=null?d.adx.toFixed(1):'—',s:d.adx>=25?'forte':d.adx>=20?'transizione':'debole',c:adxColor},
+    ].map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s}</div></div>`).join('');
+  } catch(e) {
+    document.getElementById('regimeBox').innerHTML = `<div style="color:#868e96;font-size:11px;padding:8px">⚠ Dati regime non disponibili da scannerv2 (${e.message}) — assicurati che IWMO.MI sia ancora nell'universo dei 701 ticker.</div>`;
   }
 }
 
@@ -637,14 +618,40 @@ function renderEtp() {
   if(sups && sups.length) {
     document.getElementById('etpSupports').innerHTML = '<div class="sup-grid">' +
       sups.sort((a,b)=>a.price-b.price).map(s=>{
-        const isMin = s.price === Math.min(...sups.map(x=>x.price));
         const isNear = Math.abs(s.price-lc)<1.0;
-        const cls = isMin ? 'strong' : isNear ? 'key' : '';
-        return `<div class="sup-card ${cls}"><div class="sup-price">${s.price.toFixed(2)}</div><div class="sup-date">${s.date}</div></div>`;
+        const cls = s.touches>=4 ? 'strong' : isNear ? 'key' : '';
+        const touchTxt = s.touches!=null ? ` · ${s.touches} tocch${s.touches===1?'o':'i'}` : '';
+        return `<div class="sup-card ${cls}"><div class="sup-price">${s.price.toFixed(2)}</div><div class="sup-date">${s.date}${touchTxt}</div></div>`;
       }).join('') + '</div>';
   } else {
-    document.getElementById('etpSupports').innerHTML = '<div style="color:#868e96;font-size:11px">Nessun supporto recente identificato.</div>';
+    document.getElementById('etpSupports').innerHTML = '<div style="color:#868e96;font-size:11px">Nessun supporto significativo identificato.</div>';
   }
+}
+
+// ── EXCEL ────────────────────────────────────────────────────────────────────
+function dlExcel(){
+  if(!D) return;
+  const etp = D.etp || {};
+  const N = (etp.dates||[]).length;
+  const etfRows = [];
+  for(let i=Math.max(0,N-756); i<N; i++){
+    etfRows.push({
+      'Data': etp.dates[i], 'Chiusura': etp.closes?.[i], 'KAMA Fast': etp.kama_fast?.[i],
+      'KAMA Slow': etp.kama_slow?.[i], 'RSI14': etp.rsi14?.[i], 'RSI5': etp.rsi5?.[i],
+      'AO': etp.ao?.[i], 'SAR': etp.sar?.[i], 'ER': etp.er?.[i], 'Segnale': etp.signals?.[i],
+    });
+  }
+  const stagRows = (D.stagionalita||[]).map(s=>({'Mese':s.nome,'Rend. medio %':s.avg_ret,'Win rate %':s.win_rate,'N. anni':s.n_anni}));
+  const supRows = (D.etp_supports||[]).map(s=>({'Prezzo':s.price,'Data':s.date,'Tocchi':s.touches}));
+  const rs = D.rel_strength || {};
+  const regimeRows = [{'Rif. IWMO/SWDA 3M %':rs.ret_3m,'Rif. IWMO/SWDA 6M %':rs.ret_6m,'Rif. IWMO/SWDA 12M %':rs.ret_12m,'Verdetto':rs.verdetto,'Data':rs.date}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stagRows), 'Stagionalità');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(regimeRows), 'Regime');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(etfRows), 'ETF Segnali');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(supRows), 'Supporti');
+  XLSX.writeFile(wb, `RAPTOR_IWMO_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 init();
