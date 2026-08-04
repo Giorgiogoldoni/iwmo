@@ -70,7 +70,7 @@ def calc_ao(highs, lows):
     e3=ema(mid,3); e13=ema(mid,13)
     return [round(a-b,4) for a,b in zip(e3,e13)]
 
-def calc_sar(high, low, step=0.03, max_af=0.25):
+def calc_sar(high, low, step=0.02, max_af=0.20):
     n=len(high); sar=[None]*n
     if n<5: return sar
     bull=high[1]>high[0]; af=step
@@ -132,33 +132,61 @@ def calc_stagionalita(closes, dates):
         })
     return stagionalita
 
-# ── MOMENTUM ANTONACCI ────────────────────────────────
-def calc_antonacci(closes, dates, lookback_months=12):
-    """Dual Momentum assoluto: se rendimento 12M > 0 → BUY, altrimenti → OUT"""
-    results = []
-    approx_days = lookback_months * 21
-    for i in range(approx_days, len(closes)):
-        if closes[i] and closes[i-approx_days]:
-            ret_12m = (closes[i]-closes[i-approx_days])/closes[i-approx_days]*100
-            signal = 'BUY' if ret_12m > 0 else 'OUT'
-            results.append({
-                'date': dates[i],
-                'price': closes[i],
-                'ret_12m': round(ret_12m,2),
-                'signal': signal
-            })
-    return results
-
 # ── SUPPORTI ─────────────────────────────────────────
-def find_supports(closes, dates, window=3):
-    supports = []
+def find_supports(closes, dates, window=10, cluster_pct=0.01, top_n=5):
+    """Individua i minimi locali su una finestra ampia (default ±10gg, minimi
+    di respiro settimanale/mensile, non rumore di 2-3 giorni), poi raggruppa
+    i minimi entro cluster_pct l'uno dall'altro nello stesso livello
+    (touch count = quante volte quel livello è stato toccato). Ritorna i
+    top_n livelli più significativi, ordinati per un punteggio misto:
+    numero di tocchi + vicinanza al prezzo attuale (i supporti più vicini e
+    più testati contano di più di un minimo isolato e lontano nel tempo)."""
+    raw = []
     for i in range(window, len(closes)-window):
         if not closes[i]: continue
         is_min = all(closes[i] <= closes[i-j] for j in range(1,window+1) if closes[i-j]) and \
                  all(closes[i] <= closes[i+j] for j in range(1,window+1) if closes[i+j])
         if is_min:
-            supports.append({'date': dates[i], 'price': closes[i]})
-    return supports[-20:]
+            raw.append({'date': dates[i], 'price': closes[i]})
+    if not raw:
+        return []
+
+    # ── clustering per livello di prezzo ──
+    raw.sort(key=lambda s: s['price'])
+    clusters = []
+    for s in raw:
+        placed = False
+        for c in clusters:
+            if abs(s['price'] - c['level']) / c['level'] <= cluster_pct:
+                c['touches'].append(s)
+                c['level'] = sum(t['price'] for t in c['touches']) / len(c['touches'])
+                placed = True
+                break
+        if not placed:
+            clusters.append({'level': s['price'], 'touches': [s]})
+
+    last_price = next((c for c in reversed(closes) if c), closes[-1])
+
+    # ── punteggio misto: touch count + vicinanza al prezzo attuale ──
+    scored = []
+    for c in clusters:
+        touch_count = len(c['touches'])
+        dist_pct = abs(c['level'] - last_price) / last_price if last_price else 1
+        proximity_score = max(0, 1 - dist_pct * 5)  # decade rapidamente oltre ~20% di distanza
+        score = touch_count + proximity_score * 3    # peso 3x sulla vicinanza vs 1 tocco
+        last_touch = max(c['touches'], key=lambda t: t['date'])
+        scored.append({
+            'price': round(c['level'], 4),
+            'date': last_touch['date'],
+            'touches': touch_count,
+            '_score': score,
+        })
+
+    scored.sort(key=lambda s: s['_score'], reverse=True)
+    top = scored[:top_n]
+    for s in top:
+        s.pop('_score')
+    return sorted(top, key=lambda s: s['price'])
 
 # ── MAIN ─────────────────────────────────────────────
 def main():
@@ -181,21 +209,39 @@ def main():
     etp_dates   = [ts.strftime('%Y-%m-%d') for ts in etp.index]
     print(f"IWMO.MI: {len(etp_closes)} barre ({etp_dates[0]} → {etp_dates[-1]})")
 
-    # Per coerenza di struttura con la dashboard, duplicate come benchmark 'fut'
-    fut_closes, fut_highs, fut_lows, fut_volumes, fut_dates = etp_closes, etp_highs, etp_lows, etp_volumes, etp_dates
+    # ── BENCHMARK SWDA.MI (per forza relativa tab Regime) ─────
+    print("Scarico iShares Core MSCI World UCITS ETF (SWDA.MI) come benchmark...")
+    bench = yf.download("SWDA.MI", start="2014-01-01", interval="1d",
+                         auto_adjust=True, progress=False)
+    if hasattr(bench.columns, 'levels'):
+        bench.columns = bench.columns.get_level_values(0)
+    bench_closes = [round(float(c),4) for c in bench['Close'].tolist()]
+    bench_dates  = [ts.strftime('%Y-%m-%d') for ts in bench.index]
+
+    def calc_relative_strength(closes, dates, bench_closes, bench_dates):
+        """Rendimento relativo IWMO/SWDA a 3M/6M/12M (~63/126/252 giorni di
+        borsa), allineando le due serie per data."""
+        bench_by_date = dict(zip(bench_dates, bench_closes))
+        common_dates = [d for d in dates if d in bench_by_date]
+        if not common_dates:
+            return {}
+        ratio = {d: c/bench_by_date[d] for d,c in zip(dates, closes) if d in bench_by_date}
+        ordered = [ratio[d] for d in common_dates]
+        last = ordered[-1]
+        out = {'date': common_dates[-1]}
+        for label, days in (('3m',63), ('6m',126), ('12m',252)):
+            if len(ordered) > days and ordered[-days-1]:
+                ret = (last - ordered[-days-1]) / ordered[-days-1] * 100
+                out[f'ret_{label}'] = round(ret, 2)
+            else:
+                out[f'ret_{label}'] = None
+        out['verdetto'] = ('SOVRAPERFORMA' if (out.get('ret_3m') or 0) > 0
+                            else 'SOTTOPERFORMA')
+        return out
 
     # ── ANALISI COMPLETA (MORNING + CLOSE) ─────────────
     if exec_type in ('morning', 'close', 'manual'):
         print(f"[{exec_type.upper()}] Calcolo analisi completa...")
-        
-        # Indicatori RAPTOR su IWMO Benchmark / Main
-        fut_kama_fast = calc_kama(fut_closes, n=5,  fast=3, slow=20)
-        fut_kama_slow = calc_kama(fut_closes, n=20, fast=2, slow=40)
-        fut_rsi14     = calc_rsi(fut_closes, 14)
-        fut_rsi5      = calc_rsi(fut_closes, 5)
-        fut_ao        = calc_ao(fut_highs, fut_lows)
-        fut_sar       = calc_sar(fut_highs, fut_lows)
-        fut_er        = calc_er(fut_closes, 10)
 
         # Segnali RAPTOR
         def calc_signals_list(closes, kama_fast, kama_slow, volumes, ao_arr, er_arr):
@@ -226,19 +272,13 @@ def main():
                 signals.append(sig)
             return [None]*25 + signals
 
-        fut_signals = calc_signals_list(fut_closes, fut_kama_fast, fut_kama_slow, fut_volumes, fut_ao, fut_er)
-
         # Stagionalità
-        stagionalita = calc_stagionalita(fut_closes, fut_dates)
+        stagionalita = calc_stagionalita(etp_closes, etp_dates)
 
-        # Momentum Antonacci
-        antonacci_full = calc_antonacci(fut_closes, fut_dates)
-        antonacci_latest = antonacci_full[-1] if antonacci_full else {}
+        # Forza relativa vs benchmark (sostituisce Antonacci)
+        rel_strength = calc_relative_strength(etp_closes, etp_dates, bench_closes, bench_dates)
 
-        # Supporti
-        fut_supports = find_supports(fut_closes, fut_dates)
-
-        # Mirroring/Calcolo per ETF
+        # Indicatori RAPTOR su ETF
         etp_kama_fast = calc_kama(etp_closes, n=5,  fast=3, slow=20)
         etp_kama_slow = calc_kama(etp_closes, n=20, fast=2, slow=40)
         etp_rsi14     = calc_rsi(etp_closes, 14)
@@ -248,8 +288,6 @@ def main():
         etp_er        = calc_er(etp_closes, 10)
         etp_signals   = calc_signals_list(etp_closes, etp_kama_fast, etp_kama_slow, etp_volumes, etp_ao, etp_er)
 
-        etp_antonacci = calc_antonacci(etp_closes, etp_dates)
-        etp_antonacci_latest = etp_antonacci[-1] if etp_antonacci else {}
         etp_supports = find_supports(etp_closes, etp_dates)
 
         def fmt(arr):
@@ -260,25 +298,8 @@ def main():
             'updated_at': now.isoformat(),
             'updated_display': now.strftime('%d/%m/%Y %H:%M'),
 
-            'fut': {
-                'dates':     fut_dates[-756:],
-                'closes':    fut_closes[-756:],
-                'highs':     fut_highs[-756:],
-                'lows':      fut_lows[-756:],
-                'volumes':   fut_volumes[-756:],
-                'kama_fast': fmt(fut_kama_fast[-756:]),
-                'kama_slow': fmt(fut_kama_slow[-756:]),
-                'rsi14':     fmt(fut_rsi14[-756:]),
-                'rsi5':      fmt(fut_rsi5[-756:]),
-                'ao':        fmt(fut_ao[-756:]),
-                'sar':       fmt(fut_sar[-756:]),
-                'er':        fut_er[-756:],
-                'signals':   fut_signals[-756:],
-            },
-
             'stagionalita': stagionalita,
-            'antonacci_fut': antonacci_full[-252:],
-            'antonacci_latest': antonacci_latest,
+            'rel_strength': rel_strength,
 
             'etp': {
                 'dates':     etp_dates,
@@ -296,9 +317,6 @@ def main():
                 'signals':   etp_signals,
             },
 
-            'antonacci_etp': etp_antonacci[-252:],
-            'antonacci_etp_latest': etp_antonacci_latest,
-            'fut_supports': fut_supports,
             'etp_supports':  etp_supports,
         })
 
@@ -370,20 +388,12 @@ def main():
         output['etp']['er'] = etp_er
         output['etp']['signals'] = etp_signals
 
-        output.setdefault('fut', {})
-        output['fut']['dates'] = etp_dates[-756:]
-        output['fut']['closes'] = etp_closes[-756:]
-        output['fut']['highs'] = etp_highs[-756:]
-        output['fut']['lows'] = etp_lows[-756:]
-        output['fut']['volumes'] = etp_volumes[-756:]
-        output['fut']['kama_fast'] = fmt(etp_kama_fast[-756:])
-        output['fut']['kama_slow'] = fmt(etp_kama_slow[-756:])
-        output['fut']['rsi14'] = fmt(etp_rsi14[-756:])
-        output['fut']['rsi5'] = fmt(etp_rsi5[-756:])
-        output['fut']['ao'] = fmt(etp_ao[-756:])
-        output['fut']['sar'] = fmt(etp_sar[-756:])
-        output['fut']['er'] = etp_er[-756:]
-        output['fut']['signals'] = etp_signals[-756:]
+        output.pop('fut', None)
+        output.pop('fut_supports', None)
+        output.pop('antonacci_fut', None)
+        output.pop('antonacci_latest', None)
+        output.pop('antonacci_etp', None)
+        output.pop('antonacci_etp_latest', None)
 
         output = sanitize(output)
 
