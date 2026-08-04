@@ -125,9 +125,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
 <div class="panel" id="panel-regime">
   <div class="section-title">🧭 Regime di mercato (fonte: scannerv2)</div>
   <div id="regimeBox" class="kpi-row"></div>
-  <div class="section-title">📐 Forza relativa vs benchmark (IWMO / SWDA.MI)</div>
+  <div class="section-title">📐 Forza relativa vs benchmark</div>
   <div id="relStrengthBox" class="kpi-row"></div>
-  <div style="font-size:11px;color:var(--text3);margin-top:-8px">Rendimento del rapporto IWMO/SWDA — se positivo, il fattore momentum sta sovraperformando il mercato generale; se negativo, lo sta sottoperformando.</div>
+  <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:16px">IWMO/SWDA: se positivo, il fattore momentum sovraperforma il mercato generale. IWMO/IWVL: rotazione fattoriale momentum vs value — se positivo, il momentum sta vincendo sul value.</div>
+  <div class="chart-wrap">
+    <div class="chart-label">Rapporto IWMO / IWVL — in salita = momentum batte value, in discesa = value batte momentum</div>
+    <div id="mvRotationChart"></div>
+  </div>
 </div>
 
 <!-- TAB IWMO ETF -->
@@ -561,15 +565,49 @@ function drawRenkoFut(fut) {
 
 // ── REGIME (Hurst/ADX/regime da scannerv2 + forza relativa) ──
 async function renderRegime() {
-  // Forza relativa — dato già presente in iwmo.json
+  // Forza relativa — dati già presenti in iwmo.json
   const rs = D.rel_strength;
-  document.getElementById('relStrengthBox').innerHTML = rs ? [
+  const rv = D.rel_strength_value;
+  const boxes = [];
+  if(rs) boxes.push(
     {l:'IWMO/SWDA 3M',v:rs.ret_3m!=null?(rs.ret_3m>0?'+':'')+rs.ret_3m+'%':'—',c:rs.ret_3m>0?'green':'red'},
     {l:'IWMO/SWDA 6M',v:rs.ret_6m!=null?(rs.ret_6m>0?'+':'')+rs.ret_6m+'%':'—',c:rs.ret_6m>0?'green':'red'},
     {l:'IWMO/SWDA 12M',v:rs.ret_12m!=null?(rs.ret_12m>0?'+':'')+rs.ret_12m+'%':'—',c:rs.ret_12m>0?'green':'red'},
-    {l:'Verdetto',v:rs.verdetto||'—',s:'vs benchmark',c:rs.verdetto==='SOVRAPERFORMA'?'green':'red'},
-  ].map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s||''}</div></div>`).join('')
-   : '<div style="color:#868e96;font-size:11px;padding:8px">Dati forza relativa non disponibili — eseguire il fetch aggiornato.</div>';
+    {l:'Verdetto vs mercato',v:rs.verdetto||'—',s:'IWMO vs SWDA',c:rs.verdetto==='SOVRAPERFORMA'?'green':'red'},
+  );
+  if(rv) boxes.push(
+    {l:'IWMO/IWVL 3M',v:rv.ret_3m!=null?(rv.ret_3m>0?'+':'')+rv.ret_3m+'%':'—',c:rv.ret_3m>0?'green':'red'},
+    {l:'IWMO/IWVL 6M',v:rv.ret_6m!=null?(rv.ret_6m>0?'+':'')+rv.ret_6m+'%':'—',c:rv.ret_6m>0?'green':'red'},
+    {l:'IWMO/IWVL 12M',v:rv.ret_12m!=null?(rv.ret_12m>0?'+':'')+rv.ret_12m+'%':'—',c:rv.ret_12m>0?'green':'red'},
+    {l:'Rotazione fattoriale',v:rv.ret_3m>0?'MOMENTUM':'VALUE',s:'sta vincendo (3M)',c:rv.ret_3m>0?'green':'orange'},
+  );
+  document.getElementById('relStrengthBox').innerHTML = boxes.length
+    ? boxes.map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s||''}</div></div>`).join('')
+    : '<div style="color:#868e96;font-size:11px;padding:8px">Dati forza relativa non disponibili — eseguire il fetch aggiornato.</div>';
+
+  // Grafico rapporto IWMO/IWVL
+  if(rv && rv.series_dates && rv.series_dates.length) {
+    const dts = rv.series_dates, vals = rv.series_values;
+    const W=760, H=160, PAD={l:56,r:20,t:10,b:22};
+    const PW=W-PAD.l-PAD.r, PH=H-PAD.t-PAD.b;
+    const N=vals.length;
+    const mn=Math.min(...vals)*.995, mx=Math.max(...vals)*1.005;
+    const svg=svgEl('svg',{width:W,height:H,style:'display:block;background:#fff'});
+    const xPos=i=>PAD.l+(i/Math.max(N-1,1))*PW;
+    const sy=v=>scY(v,mn,mx,PAD.t,PH);
+    svgEl('rect',{x:PAD.l,y:PAD.t,width:PW,height:PH,fill:'#f8f9fa'},svg);
+    for(const frac of [0,0.25,0.5,0.75,1]) {
+      const yy=PAD.t+PH*frac;
+      svgEl('line',{x1:PAD.l,y1:yy.toFixed(1),x2:PAD.l+PW,y2:yy.toFixed(1),stroke:'#e9ecef','stroke-width':1},svg);
+      txt(PAD.l-6,yy+3,(mx-(mx-mn)*frac).toFixed(3),'#adb5bd',7,'end',svg);
+    }
+    poly(vals.map((v,i)=>[xPos(i),sy(v)]),svg,'#6e40c9',1.8);
+    const step=Math.max(1,Math.floor(N/8));
+    for(let i=0;i<N;i+=step) txt(xPos(i),H-PAD.b+12,dts[i].slice(0,7),'#adb5bd',7,'middle',svg);
+    document.getElementById('mvRotationChart').appendChild(svg);
+  } else {
+    document.getElementById('mvRotationChart').innerHTML = '<div style="color:#868e96;font-size:11px;padding:8px">Serie storica non disponibile — eseguire il fetch aggiornato.</div>';
+  }
 
   // Regime/Hurst/ADX — fetch da scannerv2 (unica fonte che li calcola)
   try {
@@ -644,7 +682,12 @@ function dlExcel(){
   const stagRows = (D.stagionalita||[]).map(s=>({'Mese':s.nome,'Rend. medio %':s.avg_ret,'Win rate %':s.win_rate,'N. anni':s.n_anni}));
   const supRows = (D.etp_supports||[]).map(s=>({'Prezzo':s.price,'Data':s.date,'Tocchi':s.touches}));
   const rs = D.rel_strength || {};
-  const regimeRows = [{'Rif. IWMO/SWDA 3M %':rs.ret_3m,'Rif. IWMO/SWDA 6M %':rs.ret_6m,'Rif. IWMO/SWDA 12M %':rs.ret_12m,'Verdetto':rs.verdetto,'Data':rs.date}];
+  const rv = D.rel_strength_value || {};
+  const regimeRows = [{
+    'IWMO/SWDA 3M %':rs.ret_3m,'IWMO/SWDA 6M %':rs.ret_6m,'IWMO/SWDA 12M %':rs.ret_12m,'Verdetto vs mercato':rs.verdetto,
+    'IWMO/IWVL 3M %':rv.ret_3m,'IWMO/IWVL 6M %':rv.ret_6m,'IWMO/IWVL 12M %':rv.ret_12m,'Rotazione fattoriale':rv.ret_3m>0?'MOMENTUM':'VALUE',
+    'Data':rs.date||rv.date,
+  }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stagRows), 'Stagionalità');
