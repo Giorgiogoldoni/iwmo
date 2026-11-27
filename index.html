@@ -148,6 +148,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
     <div class="chart-label">Prezzo di chiusura (blu) · SMA 50 (rosso) · SMA 200 (viola) · selezione periodo</div>
     <div id="etpPriceChart"></div>
   </div>
+  <div class="section-title">🧭 RRG — Rotazione relativa IWMO vs SWDA</div><div class="chart-wrap"><div class="chart-label">Quadranti: Leading (forte e in accelerazione), Weakening, Lagging, Improving. Punti = settimane recenti.</div><div id="iwmoRrg"></div></div>
   <div class="section-title">📊 AO + RSI 14/5</div>
   <div class="section-title">📊 AO + RSI 14/5</div>
   <div class="chart-wrap">
@@ -649,35 +650,51 @@ function renderEtp() {
   }
 }
 
-function renderEtpPriceChart(etp){
+function renderIwmoRRG(){
+ const rs=D?.rel_strength||{},ds=rs.series_dates||[],ratio=rs.series_values||[];
+ const box=document.getElementById('iwmoRrg');if(!box)return;
+ if(ds.length<30||ratio.length!==ds.length){box.innerHTML='<p class="chart-label">Serie storica del benchmark non ancora disponibile: eseguire il prossimo aggiornamento dati.</p>';return;}
+ const weekly=[];for(let i=0;i<ds.length;i++){if(i===0||new Date(ds[i]).getDay()===5)weekly.push(i);}if(weekly.length<15){box.textContent='Campione insufficiente per RRG';return;}
+ const pts=[];for(let k=Math.max(13,weekly.length-26);k<weekly.length;k++){const i=weekly[k],prev=weekly[k-13],mom0=ratio[prev];if(!mom0||!ratio[i])continue;const momentum=(ratio[i]/mom0-1)*100;const rsratio=(ratio[i]/ratio[Math.max(0,i-13)]-1)*100;pts.push({date:ds[i],x:100+rsratio*4,y:100+momentum*4});}
+ if(pts.length<5){box.textContent='Campione RRG insufficiente';return;}
+ const W=760,H=520,P={l:62,r:30,t:30,b:52},xmin=Math.min(pts.map(p=>p.x).concat([85])),xmax=Math.max(pts.map(p=>p.x).concat([115])),ymin=Math.min(pts.map(p=>p.y).concat([85])),ymax=Math.max(pts.map(p=>p.y).concat([115]));
+ const padX=(xmax-xmin)*.15||5,padY=(ymax-ymin)*.15||5;xmin-=padX;xmax+=padX;ymin-=padY;ymax+=padY;
+ const x=v=>P.l+(v-xmin)/(xmax-xmin)*(W-P.l-P.r),y=v=>H-P.b-(v-ymin)/(ymax-ymin)*(H-P.t-P.b);
+ const svg=svgEl('svg',{viewBox:`\x60${W} ${H}\x60`,width:'100%',style:'max-width:100%;height:auto;font-family:system-ui'});
+ const midx=x(100),midy=y(100);svgEl('line',{x1:midx,y1:P.t,x2:midx,y2:H-P.b,stroke:'#adb5bd','stroke-dasharray':'5 4'},svg);svgEl('line',{x1:P.l,y1:midy,x2:W-P.r,y2:midy,stroke:'#adb5bd','stroke-dasharray':'5 4'},svg);
+ const labels=[['Leading',midx+8,P.t+20],['Weakening',W-P.r-80,P.t+20],['Improving',P.l+8,H-P.b-12],['Lagging',midx+8,H-P.b-12]];labels.forEach(([t,a,b])=>txt(a,b,t,'#687384',12,'start',svg));
+ const path=pts.map((p,i)=>[x(p.x),y(p.y)]);poly(path,svg,'#1565c0',2.2);pts.forEach((p,i)=>svgEl('circle',{cx:x(p.x),cy:y(p.y),r:i===pts.length-1?6:3.5,fill:i===pts.length-1?'#e8590c':'#1565c0',opacity:i===pts.length-1?1:.6},svg));const last=pts.at(-1);txt(x(last.x)+10,y(last.y)-8,ds.at(-1),'#e8590c',11,'start',svg);
+ txt(W/2,H-12,'RS-Ratio (forza relativa)',' #495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
+ box.innerHTML='';box.appendChild(svg);box.insertAdjacentHTML('beforeend',`<div class="chart-label">Ultimo punto: ${last.x.toFixed(1)} / ${last.y.toFixed(1)} · rispetto SWDA · RRG indicativo calcolato su dati settimanali</div>`);
+}
+\nfunction renderEtpPriceChart(etp){
  const dates=etp.dates||[],closes=etp.closes||[];
  const draw=()=>{
   const range=document.getElementById('etpRange')?.value||'3',view=document.getElementById('etpView')?.value||'price';
-  let end=closes.length-1;while(end>=0&&(closes[end]==null||!Number.isFinite(Number(closes[end]))))end--;
-  if(end<0)return;
-  let start=0;if(range!=='all'){const years=Number(range);const cutoff=new Date(dates[end]);cutoff.setFullYear(cutoff.getFullYear()-years);start=dates.findIndex(d=>d>=cutoff.toISOString().slice(0,10));if(start<0)start=0;}
-  const idx=[];for(let i=start;i<=end;i++)if(closes[i]!=null&&Number.isFinite(Number(closes[i])))idx.push(i);
-  if(idx.length<2)return;
-  const raw=idx.map(i=>Number(closes[i])),base=raw[0],values=view==='indexed'?raw.map(v=>v/base*100):raw;
-  const sma=(n)=>idx.map((i,pos)=>{if(i<n-1)return null;let sum=0,count=0;for(let j=i-n+1;j<=i;j++){if(closes[j]!=null){sum+=Number(closes[j]);count++;}}return count===n?(view==='indexed'?sum/n/base*100:sum/n):null});
-  const ma50=sma(50),ma200=sma(200);
-  const all=[...values,...ma50.filter(x=>x!=null),...ma200.filter(x=>x!=null)];
+  let end=closes.length-1;while(end>=0&&(closes[end]==null||!Number.isFinite(Number(closes[end]))))end--;if(end<0)return;
+  let start=0;if(range!=='all'){const cutoff=new Date(dates[end]);cutoff.setFullYear(cutoff.getFullYear()-Number(range));start=dates.findIndex(d=>d>=cutoff.toISOString().slice(0,10));if(start<0)start=0;}
+  const idx=[];for(let i=start;i<=end;i++)if(closes[i]!=null&&Number.isFinite(Number(closes[i])))idx.push(i);if(idx.length<2)return;
+  const raw=idx.map(i=>Number(closes[i])),base=raw[0],norm=v=>view==='indexed'?v/base*100:v;
+  const moving=n=>idx.map(i=>i>=n-1?norm(Array.from({length:n},(_,j)=>Number(closes[i-j])).reduce((a,b)=>a+b,0)/n):null);
+  const ma50=moving(50),ma200=moving(200),k5=idx.map(i=>etp.kama_fast?.[i]==null?null:norm(Number(etp.kama_fast[i]))),kf=idx.map(i=>etp.kama_fast?.[i]==null?null:norm(Number(etp.kama_fast[i]))),ks=idx.map(i=>etp.kama_slow?.[i]==null?null:norm(Number(etp.kama_slow[i])));
+  if(!document.getElementById('etpLines')){
+    document.getElementById('etpChartStats').insertAdjacentHTML('beforebegin','<div id="etpLines" style="display:flex;flex-wrap:wrap;gap:12px;padding:5px 12px;font-size:12px"><label><input id="line50" type="checkbox" checked> SMA 50</label><label><input id="line200" type="checkbox" checked> SMA 200</label><label><input id="lineKfast" type="checkbox"> KAMA 5 (fast)</label><label><input id="lineKslow" type="checkbox"> KAMA slow</label></div>');
+  }
+  const opts={sma50:document.getElementById('line50').checked,sma200:document.getElementById('line200').checked,kfast:document.getElementById('lineKfast').checked,kslow:document.getElementById('lineKslow').checked};
+  let all=[...raw.map(norm),...(opts.sma50?ma50:[]),...(opts.sma200?ma200:[]),...(opts.kfast?kf:[]),...(opts.kslow?ks:[])].filter(v=>v!=null);
   let min=Math.min(...all),max=Math.max(...all);const pad=(max-min)*.08||1;min-=pad;max+=pad;
-  const W=1000,H=440,P={l:70,r:24,t:22,b:48},PW=W-P.l-P.r,PH=H-P.t-P.b;
-  const x=p=>P.l+p/(idx.length-1)*PW,y=v=>P.t+(max-v)/(max-min)*PH;
-  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:'auto',style:'display:block;max-width:100%;font-family:system-ui'});
+  const W=1000,H=440,P={l:70,r:24,t:22,b:48},PW=W-P.l-P.r,PH=H-P.t-P.b,x=p=>P.l+p/(idx.length-1)*PW,y=v=>P.t+(max-v)/(max-min)*PH;
+  const svg=svgEl('svg',{viewBox:`\x60${W} ${H}\x60`,width:'100%',height:'auto',style:'display:block;max-width:100%;font-family:system-ui'});
   for(let k=0;k<=5;k++){let v=min+(max-min)*k/5,yy=y(v);svgEl('line',{x1:P.l,y1:yy,x2:W-P.r,y2:yy,stroke:'#e9ecef'},svg);txt(P.l-8,yy+4,view==='indexed'?v.toFixed(0):v.toFixed(2),'#6c757d',11,'end',svg)}
   const line=(arr,color,width)=>{const pts=arr.map((v,p)=>v!=null?[x(p),y(v)]:null).filter(Boolean);poly(pts,svg,color,width)};
-  line(ma200,'#7c3aed',2);line(ma50,'#dc2626',1.8);line(values,'#1565c0',2.2);
-  const step=Math.max(1,Math.floor(idx.length/7));for(let p=0;p<idx.length;p+=step){const dt=dates[idx[p]];txt(x(p),H-P.b+18,dt.slice(0,7),'#6c757d',10,'middle',svg)}
-  const last=values.at(-1),first=values[0],ret=(raw.at(-1)/raw[0]-1)*100,peak=Math.max(...raw),dd=(raw.at(-1)/peak-1)*100;
-  document.getElementById('etpChartStats').textContent=` ${dates[idx[0]]} → ${dates[idx.at(-1)]} · variazione periodo ${ret>=0?'+':''}${ret.toFixed(1)}% · drawdown da massimo ${dd.toFixed(1)}%`;
+  if(opts.sma200)line(ma200,'#7c3aed',2);if(opts.sma50)line(ma50,'#dc2626',1.8);if(opts.kslow)line(ks,'#16a085',2);if(opts.kfast)line(kf,'#f59f00',1.8);line(raw.map(norm),'#1565c0',2.4);
+  const step=Math.max(1,Math.floor(idx.length/7));for(let q=0;q<idx.length;q+=step)txt(x(q),H-P.b+18,dates[idx[q]].slice(0,7),'#6c757d',10,'middle',svg);
+  const ret=(raw.at(-1)/raw[0]-1)*100,peak=Math.max(...raw),dd=(raw.at(-1)/peak-1)*100;
+  document.getElementById('etpChartStats').textContent=` ${dates[idx[0]]} → ${dates[idx.at(-1)]} · rendimento ${ret>=0?'+':''}${ret.toFixed(1)}% · drawdown da massimo ${dd.toFixed(1)}%`;
   document.getElementById('etpPriceChart').innerHTML='';document.getElementById('etpPriceChart').appendChild(svg);
  };
- ['etpRange','etpView'].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=draw});draw();
-}
-
-// ── EXCEL ────────────────────────────────────────────────────────────────────
+ ['etpRange','etpView','line50','line200','lineKfast','lineKslow'].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=draw});draw();
+}// ── EXCEL ────────────────────────────────────────────────────────────────────
 function dlExcel(){
   if(!D) return;
   const etp = D.etp || {};
