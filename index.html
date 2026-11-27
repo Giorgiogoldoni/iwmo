@@ -654,8 +654,8 @@ function renderIwmoRRG(){
  const rs=D?.rel_strength||{},ds=rs.series_dates||[],ratio=rs.series_values||[];
  const box=document.getElementById('iwmoRrg');if(!box)return;
  if(ds.length<30||ratio.length!==ds.length){box.innerHTML='<p class="chart-label">Serie storica del benchmark non ancora disponibile: eseguire il prossimo aggiornamento dati.</p>';return;}
- const weekly=[];for(let i=0;i<ds.length;i++){if(i===0||new Date(ds[i]).getDay()===5)weekly.push(i);}if(weekly.length<15){box.textContent='Campione insufficiente per RRG';return;}
- const pts=[];for(let k=Math.max(13,weekly.length-26);k<weekly.length;k++){const i=weekly[k],prev=weekly[k-13],mom0=ratio[prev];if(!mom0||!ratio[i])continue;const momentum=(ratio[i]/mom0-1)*100;const rsratio=(ratio[i]/ratio[Math.max(0,i-13)]-1)*100;pts.push({date:ds[i],x:100+rsratio*4,y:100+momentum*4});}
+ const weekly=[];for(let i=0;i<ds.length;i+=5)weekly.push(i);if(weekly.at(-1)!==ds.length-1)weekly.push(ds.length-1);if(weekly.length<15){box.textContent='Campione insufficiente per RRG';return;}
+ const pts=[];for(let k=Math.max(13,weekly.length-26);k<weekly.length;k++){const i=weekly[k],prev=weekly[k-13];const avg=weekly.slice(Math.max(0,k-12),k+1).reduce((a,j)=>a+Number(ratio[j]),0)/Math.min(13,k+1);if(!avg||!ratio[i]||!ratio[prev])continue;const xval=100*ratio[i]/avg;const prevAvg=weekly.slice(Math.max(0,k-25),k-12).reduce((a,j)=>a+Number(ratio[j]),0)/13;const yval=prevAvg?100*xval/(100*ratio[prev]/prevAvg):100;pts.push({date:ds[i],x:xval,y:yval});}
  if(pts.length<5){box.textContent='Campione RRG insufficiente';return;}
  const W=760,H=520,P={l:62,r:30,t:30,b:52},xmin=Math.min(...pts.map(p=>p.x).concat([85])),xmax=Math.max(...pts.map(p=>p.x).concat([115])),ymin=Math.min(...pts.map(p=>p.y).concat([85])),ymax=Math.max(...pts.map(p=>p.y).concat([115]));
  const padX=(xmax-xmin)*.15||5,padY=(ymax-ymin)*.15||5;xmin-=padX;xmax+=padX;ymin-=padY;ymax+=padY;
@@ -664,7 +664,7 @@ function renderIwmoRRG(){
  const midx=x(100),midy=y(100);svgEl('line',{x1:midx,y1:P.t,x2:midx,y2:H-P.b,stroke:'#adb5bd','stroke-dasharray':'5 4'},svg);svgEl('line',{x1:P.l,y1:midy,x2:W-P.r,y2:midy,stroke:'#adb5bd','stroke-dasharray':'5 4'},svg);
  const labels=[['Improving',P.l+8,P.t+20],['Leading',W-P.r-80,P.t+20],['Lagging',P.l+8,H-P.b-12],['Weakening',W-P.r-80,H-P.b-12]];labels.forEach(([t,a,b])=>txt(a,b,t,'#687384',12,'start',svg));
  const path=pts.map((p,i)=>[x(p.x),y(p.y)]);poly(path,svg,'#1565c0',2.2);pts.forEach((p,i)=>svgEl('circle',{cx:x(p.x),cy:y(p.y),r:i===pts.length-1?6:3.5,fill:i===pts.length-1?'#e8590c':'#1565c0',opacity:i===pts.length-1?1:.6},svg));const last=pts.at(-1);txt(x(last.x)+10,y(last.y)-8,ds.at(-1),'#e8590c',11,'start',svg);
- txt(W/2,H-12,'RS-Ratio (forza relativa)',' #495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
+ txt(W/2,H-12,'RS-Ratio (forza relativa)','#495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
  box.innerHTML='';box.appendChild(svg);box.insertAdjacentHTML('beforeend',`<div class="chart-label">Ultimo punto: ${last.x.toFixed(1)} / ${last.y.toFixed(1)} · rispetto SWDA · RRG indicativo calcolato su dati settimanali</div>`);
 }
 \nfunction renderEtpPriceChart(etp){
