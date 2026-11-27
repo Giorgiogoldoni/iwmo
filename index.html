@@ -144,8 +144,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
     <label>Vista <select id="etpView"><option value="price">Prezzo</option><option value="indexed">Base 100</option></select></label>
     <span id="etpChartStats" class="chart-label"></span>
   </div>
+  <div id="kamal5Stats" class="kpi-row" style="margin:8px 12px"></div>
   <div class="chart-wrap">
-    <div class="chart-label">Prezzo di chiusura (blu) · SMA 50 (rosso) · SMA 200 (viola) · selezione periodo</div>
+    <div class="chart-label">Prezzo di chiusura (blu) · SMA 50 (rosso) · SMA 200 (viola) · segnali Kamal 5 BIGCHATGPT: ▲ BUY breakout 5 barre · ▼ SELL/uscita</div>
     <div id="etpPriceChart"></div>
   </div>
   <div class="section-title">🧭 RRG — Rotazione relativa IWMO vs SWDA</div><div class="chart-wrap"><div class="chart-label">Quadranti: Leading (forte e in accelerazione), Weakening, Lagging, Improving. Punti = settimane recenti.</div><div id="iwmoRrg"></div></div>
@@ -667,7 +668,7 @@ function renderIwmoRRG(){
  txt(W/2,H-12,'RS-Ratio (forza relativa)','#495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
  box.innerHTML='';box.appendChild(svg);box.insertAdjacentHTML('beforeend',`<div class="chart-label">Ultimo punto: ${last.x.toFixed(1)} / ${last.y.toFixed(1)} · rispetto SWDA · RRG indicativo calcolato su dati settimanali</div>`);
 }
-\nfunction renderEtpPriceChart(etp){
+\nfunction renderKamal5Stats(etp){\n const s=etp.kamal5_stats||{}, box=document.getElementById('kamal5Stats');if(!box)return;\n const sig=s.last_signal||'—',ret=s.total_return_pct,bh=s.buyhold_pct;\n const cards=[{l:'Kamal 5 — stato',v:sig,s:s.signal_date||'ultimo segnale',c:sig==='BUY'?'green':sig==='SELL'?'red':''},{l:'Rendimento sistema',v:ret!=null?(ret>=0?'+':'')+ret+'%':'—',s:'backtest long-only · senza costi',c:ret>=0?'green':'red'},{l:'Buy & Hold',v:bh!=null?(bh>=0?'+':'')+bh+'%':'—',s:'dal primo BUY · stesso periodo',c:bh>=0?'green':'red'},{l:'Operazioni',v:s.trades??'—',s:s.win_rate!=null?'win rate '+s.win_rate+'%':'win rate n/d',c:''},{l:'Drawdown max',v:s.max_drawdown_pct!=null?s.max_drawdown_pct+'%':'—',s:'equity del sistema',c:'red'}];\n box.innerHTML=cards.map(k=>'<div class="kpi"><div class="kl">'+k.l+'</div><div class="kv '+k.c+'">'+k.v+'</div><div class="ks2">'+k.s+'</div></div>').join('');\n}\nfunction renderEtpPriceChart(etp){renderKamal5Stats(etp);
  const dates=etp.dates||[],closes=etp.closes||[];
  const draw=()=>{
   const range=document.getElementById('etpRange')?.value||'3',view=document.getElementById('etpView')?.value||'price';
@@ -678,9 +679,9 @@ function renderIwmoRRG(){
   const moving=n=>idx.map(i=>i>=n-1?norm(Array.from({length:n},(_,j)=>Number(closes[i-j])).reduce((a,b)=>a+b,0)/n):null);
   const ma50=moving(50),ma200=moving(200),k5=idx.map(i=>etp.kama_fast?.[i]==null?null:norm(Number(etp.kama_fast[i]))),kf=idx.map(i=>etp.kama_fast?.[i]==null?null:norm(Number(etp.kama_fast[i]))),ks=idx.map(i=>etp.kama_slow?.[i]==null?null:norm(Number(etp.kama_slow[i])));
   if(!document.getElementById('etpLines')){
-    document.getElementById('etpChartStats').insertAdjacentHTML('beforebegin','<div id="etpLines" style="display:flex;flex-wrap:wrap;gap:12px;padding:5px 12px;font-size:12px"><label><input id="line50" type="checkbox" checked> SMA 50</label><label><input id="line200" type="checkbox" checked> SMA 200</label><label><input id="lineKfast" type="checkbox"> KAMA 5 (fast)</label><label><input id="lineKslow" type="checkbox"> KAMA slow</label></div>');
+    document.getElementById('etpChartStats').insertAdjacentHTML('beforebegin','<div id="etpLines" style="display:flex;flex-wrap:wrap;gap:12px;padding:5px 12px;font-size:12px"><label><input id="line50" type="checkbox" checked> SMA 50</label><label><input id="line200" type="checkbox" checked> SMA 200</label><label><input id="lineKfast" type="checkbox"> KAMA 5 (fast)</label><label><input id="lineKslow" type="checkbox"> KAMA slow</label><label><input id="lineK5Signals" type="checkbox" checked> Segnali Kamal 5</label></div>');
   }
-  const opts={sma50:document.getElementById('line50').checked,sma200:document.getElementById('line200').checked,kfast:document.getElementById('lineKfast').checked,kslow:document.getElementById('lineKslow').checked};
+  const opts={sma50:document.getElementById('line50').checked,sma200:document.getElementById('line200').checked,kfast:document.getElementById('lineKfast').checked,kslow:document.getElementById('lineKslow').checked,k5:document.getElementById('lineK5Signals').checked};
   let all=[...raw.map(norm),...(opts.sma50?ma50:[]),...(opts.sma200?ma200:[]),...(opts.kfast?kf:[]),...(opts.kslow?ks:[])].filter(v=>v!=null);
   let min=Math.min(...all),max=Math.max(...all);const pad=(max-min)*.08||1;min-=pad;max+=pad;
   const W=1000,H=440,P={l:70,r:24,t:22,b:48},PW=W-P.l-P.r,PH=H-P.t-P.b,x=p=>P.l+p/(idx.length-1)*PW,y=v=>P.t+(max-v)/(max-min)*PH;
@@ -693,7 +694,8 @@ function renderIwmoRRG(){
   document.getElementById('etpChartStats').textContent=` ${dates[idx[0]]} → ${dates[idx.at(-1)]} · rendimento ${ret>=0?'+':''}${ret.toFixed(1)}% · drawdown da massimo ${dd.toFixed(1)}%`;
   document.getElementById('etpPriceChart').innerHTML='';document.getElementById('etpPriceChart').appendChild(svg);
  };
- ['etpRange','etpView','line50','line200','lineKfast','lineKslow'].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=draw});draw();
+ if(opts.k5){const ss=etp.kamal5_signals||[];idx.forEach((orig,q)=>{const s=ss[orig];if(s!=='BUY'&&s!=='SELL')return;const yy=y(norm(Number(closes[orig])));const col=s==='BUY'?'#198754':'#dc3545';txt(x(q),yy+(s==='BUY'?-12:18),s==='BUY'?'▲ BUY':'▼ SELL',col,10,'middle',svg);svgEl('circle',{cx:x(q),cy:yy,r:4,fill:col,stroke:'#fff','stroke-width':1},svg);});}
+  ['etpRange','etpView','line50','line200','lineKfast','lineKslow','lineK5Signals'].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=draw});draw();
 }// ── EXCEL ────────────────────────────────────────────────────────────────────
 function dlExcel(){
   if(!D) return;
@@ -704,7 +706,7 @@ function dlExcel(){
     etfRows.push({
       'Data': etp.dates[i], 'Chiusura': etp.closes?.[i], 'KAMA Fast': etp.kama_fast?.[i],
       'KAMA Slow': etp.kama_slow?.[i], 'RSI14': etp.rsi14?.[i], 'RSI5': etp.rsi5?.[i],
-      'AO': etp.ao?.[i], 'SAR': etp.sar?.[i], 'ER': etp.er?.[i], 'Segnale': etp.signals?.[i],
+      'AO': etp.ao?.[i], 'SAR': etp.sar?.[i], 'ER': etp.er?.[i], 'Segnale RAPTOR': etp.signals?.[i], 'Kamal5': etp.kamal5_signals?.[i],
     });
   }
   const stagRows = (D.stagionalita||[]).map(s=>({'Mese':s.nome,'Rend. medio %':s.avg_ret,'Rend. mediano %':s.median_ret,'Win rate %':s.win_rate,'N. mesi/anni':s.n_anni,'Rendimenti annuali %':(s.returns||[]).join(', ')}));
