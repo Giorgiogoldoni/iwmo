@@ -3,8 +3,16 @@ on:
   schedule:
     - cron: "15 9 * * 1-5"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "monitor_holdings.py"
+      - ".github/workflows/holdings.monitor.yml"
 permissions:
   contents: write
+concurrency:
+  group: iwmo-holdings-monitor
+  cancel-in-progress: false
 jobs:
   holdings:
     runs-on: ubuntu-latest
