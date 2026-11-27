@@ -116,6 +116,10 @@ def main():
  (ROOT/"changes.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
  print("Fetching approximate momentum metrics for constituents…")
  mom=momentum_for([r.get("ticker") for r in holdings])
+ for r in holdings:
+  m=mom.get(yahoo_ticker(r.get("ticker")),{});r.update(m)
+ ranked=sorted([(r.get("momentum_proxy"),r) for r in holdings if r.get("momentum_proxy") is not None],reverse=True,key=lambda x:x[0])
+ for rank,(_,r) in enumerate(ranked,1):r["momentum_rank"]=rank
  snapshot["momentum_note"]="Yahoo-derived approximate proxy; not MSCI's official methodology."
  snapshot["momentum_coverage"]=len(mom);snapshot["momentum"]=mom
  path.write_text(json.dumps(snapshot,ensure_ascii=False,indent=2));(ROOT/"latest.json").write_text(json.dumps(snapshot,ensure_ascii=False,indent=2))
