@@ -668,7 +668,19 @@ function renderIwmoRRG(){
  txt(W/2,H-12,'RS-Ratio (forza relativa)','#495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
  box.innerHTML='';box.appendChild(svg);box.insertAdjacentHTML('beforeend',`<div class="chart-label">Ultimo punto: ${last.x.toFixed(1)} / ${last.y.toFixed(1)} · rispetto SWDA · RRG indicativo calcolato su dati settimanali</div>`);
 }
-\nfunction renderKamal5Stats(etp){\n const s=etp.kamal5_stats||{}, box=document.getElementById('kamal5Stats');if(!box)return;\n const sig=s.last_signal||'—',ret=s.total_return_pct,bh=s.buyhold_pct;\n const cards=[{l:'Kamal 5 — stato',v:sig,s:s.signal_date||'ultimo segnale',c:sig==='BUY'?'green':sig==='SELL'?'red':''},{l:'Rendimento sistema',v:ret!=null?(ret>=0?'+':'')+ret+'%':'—',s:'backtest long-only · senza costi',c:ret>=0?'green':'red'},{l:'Buy & Hold',v:bh!=null?(bh>=0?'+':'')+bh+'%':'—',s:'dal primo BUY · stesso periodo',c:bh>=0?'green':'red'},{l:'Operazioni',v:s.trades??'—',s:s.win_rate!=null?'win rate '+s.win_rate+'%':'win rate n/d',c:''},{l:'Drawdown max',v:s.max_drawdown_pct!=null?s.max_drawdown_pct+'%':'—',s:'equity del sistema',c:'red'}];\n box.innerHTML=cards.map(k=>'<div class="kpi"><div class="kl">'+k.l+'</div><div class="kv '+k.c+'">'+k.v+'</div><div class="ks2">'+k.s+'</div></div>').join('');\n}\nfunction renderEtpPriceChart(etp){renderKamal5Stats(etp);
+\nfunction renderKamal5Stats(etp){
+ const s=etp.kamal5_stats||{}, box=document.getElementById('kamal5Stats');if(!box)return;
+ const sig=s.last_signal||'—',ret=s.total_return_pct,bh=s.buyhold_pct;
+ const cards=[
+  {l:'Kamal 5 — stato',v:sig,s:s.signal_date||'ultimo segnale',c:sig==='BUY'?'green':sig==='SELL'?'red':''},
+  {l:'Rendimento sistema',v:ret!=null?(ret>=0?'+':'')+ret+'%':'—',s:'backtest long-only · senza costi',c:ret>=0?'green':'red'},
+  {l:'Buy & Hold',v:bh!=null?(bh>=0?'+':'')+bh+'%':'—',s:'dal primo BUY · stesso periodo',c:bh>=0?'green':'red'},
+  {l:'Operazioni',v:s.trades??'—',s:s.win_rate!=null?'win rate '+s.win_rate+'%':'win rate n/d',c:''},
+  {l:'Drawdown max',v:s.max_drawdown_pct!=null?s.max_drawdown_pct+'%':'—',s:'equity del sistema',c:'red'}
+ ];
+ box.innerHTML=cards.map(k=>'<div class="kpi"><div class="kl">'+k.l+'</div><div class="kv '+k.c+'">'+k.v+'</div><div class="ks2">'+k.s+'</div></div>').join('');
+}
+function renderEtpPriceChart(etp){renderKamal5Stats(etp);
  const dates=etp.dates||[],closes=etp.closes||[];
  const draw=()=>{
   const range=document.getElementById('etpRange')?.value||'3',view=document.getElementById('etpView')?.value||'price';
