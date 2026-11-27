@@ -12,11 +12,11 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;p
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.toolbar input,.toolbar select{padding:8px;border:1px solid var(--line);border-radius:6px}
 .scroll{overflow:auto;max-height:70vh}.note{color:var(--muted);font-size:12px;line-height:1.5}
 </style></head>
-<body><header><h1>📊 IWMO — Monitor del portafoglio BlackRock</h1><a href="./index.html">← RAPTOR IWMO</a></header>
+<body><header><h1>📊 IWMO — Monitor del portafoglio BlackRock</h1><a href="./IWMO_holdings_history.xlsx">⬇ Scarica Excel storico</a><a href="./index.html">← RAPTOR IWMO</a></header>
 <main><div id="status" class="card">Caricamento snapshot…</div><div class="grid" id="kpis"></div>
 <section><h2>Variazioni effettive tra snapshot</h2><p class="note">Una variazione di peso non implica un acquisto/vendita. Gli ingressi e le uscite vengono considerati cambiamenti di composizione; i delta dei pesi sono separati e possono riflettere il mercato.</p><div id="changes"></div></section>
 <section><h2>Portafoglio attuale</h2><div class="toolbar"><input id="q" placeholder="Filtra ticker / nome / ISIN"><select id="sort"><option value="weight">Peso decrescente</option><option value="ticker">Ticker A–Z</option><option value="sector">Settore</option></select></div><div class="scroll"><table><thead><tr><th>Ticker</th><th>Titolo</th><th>Settore</th><th>ISIN</th><th class="num">Peso %</th><th class="num">Quantità</th></tr></thead><tbody id="rows"></tbody></table></div></section>
-<p class="note">Fonte: CSV holdings ufficiale iShares/BlackRock. Snapshot archiviati in <a href="https://github.com/Giorgiogoldoni/iwmo/tree/main/holdings/snapshots">GitHub</a>. Dati pubblicati secondo disponibilità della fonte, non necessariamente intraday.</main>
+<p class="note">Momentum proxy: stima indipendente da prezzi Yahoo Finance, non score MSCI ufficiale. Fonte: CSV holdings ufficiale iShares/BlackRock. Snapshot archiviati in <a href="https://github.com/Giorgiogoldoni/iwmo/tree/main/holdings/snapshots">GitHub</a>. Dati pubblicati secondo disponibilità della fonte, non necessariamente intraday.</main>
 <script>
 let data;
 const fmt=(n,d=2)=>Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d});
