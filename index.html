@@ -691,7 +691,7 @@ function renderIwmoRRG(){
  const ks=[];for(let n=5;n<=90;n+=5)ks.push(kama(src,n));ks.push(kama(src,100));
  const k100=kama(valid.map(i=>+cl[i]),100),avgDist=Array(valid.length).fill(null),line2=Array(valid.length).fill(null);
  for(let i=0;i<valid.length;i++){if(ks.some(a=>a[i]==null)||k100[i]==null)continue;let sum=0;for(let j=0;j<ks.length-1;j++){const a=ks[j][i],b=ks[j+1][i];if(b)sum+=(a-b)/b;}avgDist[i]=sum/(ks.length-1);line2[i]=k100[i]*(1+10*avgDist[i]);}
- const line3=kama(line2.map(v=>v==null?0:v),10);
+ const line3=Array(valid.length).fill(null);const firstCloud=line2.findIndex(v=>v!=null);if(firstCloud>=0){const tail=kama(line2.slice(firstCloud).map(Number),10);tail.forEach((v,j)=>line3[firstCloud+j]=v);}
  const green=valid.map((_,i)=>avgDist[i]!=null&&line3[i]!=null&&line2[i]>line3[i]&&avgDist[i]>0);
  const calc=months=>{
   const end=valid.at(-1),cut=new Date(dates[end]);cut.setMonth(cut.getMonth()-months);
