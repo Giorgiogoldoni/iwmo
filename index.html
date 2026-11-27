@@ -684,7 +684,7 @@ function renderIwmoRRG(){
 }
 \nfunction renderKamaCloudComparison(etp){
  const dates=etp.dates||[],cl=etp.closes||[],hi=etp.highs||[],lo=etp.lows||[];
- const valid=[];for(let i=0;i<dates.length;i++)if(Number.isFinite(+cl[i])&&Number.isFinite(+hi[i])&&Number.isFinite(+lo[i]))valid.push(i);
+ const valid=[];for(let i=0;i<dates.length;i++)if(cl[i]!=null&&hi[i]!=null&&lo[i]!=null&&Number.isFinite(+cl[i])&&Number.isFinite(+hi[i])&&Number.isFinite(+lo[i]))valid.push(i);
  if(valid.length<120)return;
  const src=valid.map(i=>(+hi[i]+ +lo[i]+2* +cl[i])/4);
  function kama(arr,n,fast=2,slow=30){const out=Array(arr.length).fill(null),f=2/(fast+1),s=2/(slow+1);if(arr.length<=n)return out;out[n]=arr[n];for(let i=n+1;i<arr.length;i++){let dir=Math.abs(arr[i]-arr[i-n]),vol=0;for(let j=i-n+1;j<=i;j++)vol+=Math.abs(arr[j]-arr[j-1]);let er=vol?dir/vol:0,sc=Math.pow(er*(f-s)+s,2);out[i]=out[i-1]+sc*(arr[i]-out[i-1]);}return out;}
