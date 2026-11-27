@@ -138,11 +138,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
 <!-- TAB IWMO ETF -->
 <div class="panel" id="panel-etp">
   <div class="kpi-row" id="etp-kpis"></div>
-  <div class="section-title">📈 IWMO — Prezzo + KAMA + SAR + Segnali</div>
+  <div class="section-title">📈 IWMO — Quotazione storica</div>
+  <div class="toolbar" style="padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap">
+    <label>Periodo <select id="etpRange"><option value="1">1 anno</option><option value="3" selected>3 anni</option><option value="5">5 anni</option><option value="all">Tutto lo storico</option></select></label>
+    <label>Vista <select id="etpView"><option value="price">Prezzo</option><option value="indexed">Base 100</option></select></label>
+    <span id="etpChartStats" class="chart-label"></span>
+  </div>
   <div class="chart-wrap">
-    <div class="chart-label">Rosso = KAMA Fast · Viola = KAMA Slow · Punti SAR · ▲ BUY · ▼ SELL</div>
+    <div class="chart-label">Prezzo di chiusura · SMA 50 e SMA 200 · selezione periodo · grafico responsive</div>
     <div id="etpPriceChart"></div>
   </div>
+  <div class="section-title">📊 AO + RSI 14/5</div>
   <div class="section-title">📊 AO + RSI 14/5</div>
   <div class="chart-wrap">
     <div class="chart-label">AO (EMA3−EMA13) · RSI14 arancio · RSI5 blu tratteggiato</div>
@@ -263,7 +269,7 @@ function renderAutoComment() {
   }
 
   let supTxt='';
-  const sups = D.etp_supports;
+  renderEtpPriceChart(etp);\n\n  const sups = D.etp_supports;
   if(sups && sups.length && lc!=null){
     const nearest = sups.reduce((a,b)=>Math.abs(b.price-lc)<Math.abs(a.price-lc)?b:a);
     const distPct = ((lc-nearest.price)/nearest.price*100).toFixed(1);
@@ -305,53 +311,29 @@ function txt(x,y,s,fill,size=8,anchor='middle',svg2) {
 
 // ── STAGIONALITÀ ──────────────────────────────────
 function renderStagionalita() {
-  const stag = D.stagionalita;
-  if (!stag || !stag.length) return;
+  const stag = D.stagionalita || [];
+  if (!stag.length) return;
   const mese_att = new Date().getMonth()+1;
-
-  const best  = stag.reduce((a,b)=>a.avg_ret>b.avg_ret?a:b);
-  const worst = stag.reduce((a,b)=>a.avg_ret<b.avg_ret?a:b);
-  const curr  = stag[mese_att-1] || stag[0];
+  const best = stag.reduce((a,b)=>(a.avg_ret??-Infinity)>(b.avg_ret??-Infinity)?a:b);
+  const worst = stag.reduce((a,b)=>(a.avg_ret??Infinity)<(b.avg_ret??Infinity)?a:b);
+  const curr = stag[mese_att-1] || stag[0];
+  const sampleTotal = stag.reduce((sum,m)=>sum+(m.n_anni||0),0);
   document.getElementById('stag-kpis').innerHTML = [
-    {l:'Mese attuale',v:curr.nome,s:`avg ${curr.avg_ret>0?'+':''}${curr.avg_ret}% · WR ${curr.win_rate}%`,c:'iwmo'},
-    {l:'Mese migliore',v:best.nome,s:`+${best.avg_ret}% · WR ${best.win_rate}%`,c:'green'},
-    {l:'Mese peggiore',v:worst.nome,s:`${worst.avg_ret}% · WR ${worst.win_rate}%`,c:'red'},
-    {l:'Dataset',v:'Storico',s:'iShares World Momentum (IWMO)',c:''},
+    {l:'Mese corrente',v:curr.nome,s:`media ${(curr.avg_ret||0)>0?'+':''}${curr.avg_ret}% · win ${curr.win_rate}% · n=${curr.n_anni}`,c:'iwmo'},
+    {l:'Media migliore',v:best.nome,s:`+${best.avg_ret}% · mediana ${best.median_ret??'—'}% · win ${best.win_rate}%`,c:'green'},
+    {l:'Media peggiore',v:worst.nome,s:`${worst.avg_ret}% · mediana ${worst.median_ret??'—'}% · win ${worst.win_rate}%`,c:'red'},
+    {l:'Campione',v:'~12 anni',s:'rendimenti mensili (non giornalieri) · ${sampleTotal} osservazioni',c:''},
   ].map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s}</div></div>`).join('');
 
-  const W=700, H=200, PAD={l:50,r:20,t:10,b:30};
-  const PW=W-PAD.l-PAD.r, PH=H-PAD.t-PAD.b;
-  const vals = stag.map(s=>s.avg_ret);
-  const mn=Math.min(...vals,0)*1.1, mx=Math.max(...vals,0)*1.1;
-  const barW = PW/12 - 4;
-  const zero = scY(0,mn,mx,PAD.t,PH);
-
-  const svg = svgEl('svg',{width:W,height:H,style:'display:block;background:#fff'});
-
-  [mn,0,mx].forEach(v=>{
-    const y=scY(v,mn,mx,PAD.t,PH);
-    svgEl('line',{x1:PAD.l,y1:y.toFixed(1),x2:PAD.l+PW,y2:y.toFixed(1),stroke:v===0?'#ced4da':'#e9ecef','stroke-width':v===0?1:.5},svg);
-    txt(PAD.l-4,y+3,(v>0?'+':'')+v.toFixed(2)+'%','#adb5bd',6.5,'end',svg);
-  });
-
-  stag.forEach((s,i)=>{
-    const x = PAD.l + i*(PW/12) + 2;
-    const y = scY(s.avg_ret,mn,mx,PAD.t,PH);
-    const bh = Math.abs(y-zero);
-    const col = s.avg_ret>=0 ? '#2f9e44' : '#c92a2a';
-    const isNow = (i+1)===mese_att;
-    svgEl('rect',{x:x.toFixed(1),y:Math.min(y,zero).toFixed(1),width:barW.toFixed(1),height:Math.max(bh,1).toFixed(1),
-      fill:col,opacity:isNow?'1':'0.65',stroke:isNow?'#1a1208':'none','stroke-width':'2'},svg);
-    txt(x+barW/2, H-PAD.b+12, s.nome,'#495057',7,'middle',svg);
-    txt(x+barW/2, Math.min(y,zero)-3, (s.avg_ret>0?'+':'')+s.avg_ret+'%','#495057',6.5,'middle',svg);
-    txt(x+barW/2, Math.min(y,zero)-12, s.win_rate+'%','#868e96',6,'middle',svg);
-  });
-
-  const kama_stag = calcKamaSimple(vals, 3);
-  const kpts = kama_stag.map((v,i)=>v!=null?[PAD.l+(i+0.5)*(PW/12), scY(v,mn,mx,PAD.t,PH)]:null).filter(Boolean);
-  poly(kpts, svg, '#c8960c', 2.5);
-
-  document.getElementById('stagChart').appendChild(svg);
+  const W=900,H=310,P={l:58,r:22,t:22,b:45},PW=W-P.l-P.r,PH=H-P.t-P.b;
+  const vals=stag.map(x=>Number(x.avg_ret)||0), med=stag.map(x=>Number(x.median_ret??x.avg_ret)||0);
+  const min=Math.min(...vals,...med,0)-0.6,max=Math.max(...vals,...med,0)+0.6;
+  const y=v=>P.t+(max-v)/(max-min)*PH, zero=y(0),barW=PW/12*0.58;
+  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:'auto',style:'display:block;max-width:100%;font-family:system-ui'});
+  [min,0,max].forEach(v=>{let yy=y(v);svgEl('line',{x1:P.l,y1:yy,x2:W-P.r,y2:yy,stroke:v===0?'#adb5bd':'#e9ecef','stroke-width':v===0?1.3:0.7},svg);txt(P.l-7,yy+3,v.toFixed(1)+'%','#6c757d',10,'end',svg)});
+  stag.forEach((m,i)=>{const x=P.l+(i+.5)*PW/12;const yy=y(vals[i]);const h=Math.max(1,Math.abs(yy-zero));const col=vals[i]>=0?'#2f9e44':'#c92a2a';svgEl('rect',{x:x-barW/2,y:Math.min(yy,zero),width:barW,height:h,rx:4,fill:col,opacity:i+1===mese_att?1:.72,stroke:i+1===mese_att?'#17212b':'none','stroke-width':2},svg);svgEl('circle',{cx:x,cy:y(med[i]),r:4.5,fill:'#f59f00',stroke:'#fff','stroke-width':1},svg);txt(x,H-P.b+17,m.nome,'#495057',10,'middle',svg);txt(x,Math.min(yy,zero)-7,(vals[i]>0?'+':'')+vals[i].toFixed(1)+'%','#495057',9,'middle',svg);txt(x,H-8,'n='+(m.n_anni||0),'#868e96',8,'middle',svg)});
+  document.getElementById('stagChart').innerHTML='';document.getElementById('stagChart').appendChild(svg);
+  document.getElementById('stagChart').insertAdjacentHTML('beforeend','<p class="chart-label">Barra = rendimento medio mese-su-mese · pallino arancione = mediana · n = anni disponibili. Campione corto (~11–12 anni): stagionalità descrittiva, non segnale operativo.</p>');
   renderFutChart();
 }
 
@@ -665,6 +647,34 @@ function renderEtp() {
   } else {
     document.getElementById('etpSupports').innerHTML = '<div style="color:#868e96;font-size:11px">Nessun supporto significativo identificato.</div>';
   }
+}
+
+function renderEtpPriceChart(etp){
+ const dates=etp.dates||[],closes=etp.closes||[];
+ const draw=()=>{
+  const range=document.getElementById('etpRange')?.value||'3',view=document.getElementById('etpView')?.value||'price';
+  let end=closes.length-1;while(end>=0&&(closes[end]==null||!Number.isFinite(Number(closes[end]))))end--;
+  if(end<0)return;
+  let start=0;if(range!=='all'){const years=Number(range);const cutoff=new Date(dates[end]);cutoff.setFullYear(cutoff.getFullYear()-years);start=dates.findIndex(d=>d>=cutoff.toISOString().slice(0,10));if(start<0)start=0;}
+  const idx=[];for(let i=start;i<=end;i++)if(closes[i]!=null&&Number.isFinite(Number(closes[i])))idx.push(i);
+  if(idx.length<2)return;
+  const raw=idx.map(i=>Number(closes[i])),base=raw[0],values=view==='indexed'?raw.map(v=>v/base*100):raw;
+  const sma=(n)=>idx.map((i,pos)=>{if(i<n-1)return null;let sum=0,count=0;for(let j=i-n+1;j<=i;j++){if(closes[j]!=null){sum+=Number(closes[j]);count++;}}return count===n?(view==='indexed'?sum/n/base*100:sum/n):null});
+  const ma50=sma(50),ma200=sma(200);
+  const all=[...values,...ma50.filter(x=>x!=null),...ma200.filter(x=>x!=null)];
+  let min=Math.min(...all),max=Math.max(...all);const pad=(max-min)*.08||1;min-=pad;max+=pad;
+  const W=1000,H=440,P={l:70,r:24,t:22,b:48},PW=W-P.l-P.r,PH=H-P.t-P.b;
+  const x=p=>P.l+p/(idx.length-1)*PW,y=v=>P.t+(max-v)/(max-min)*PH;
+  const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:'auto',style:'display:block;max-width:100%;font-family:system-ui'});
+  for(let k=0;k<=5;k++){let v=min+(max-min)*k/5,yy=y(v);svgEl('line',{x1:P.l,y1:yy,x2:W-P.r,y2:yy,stroke:'#e9ecef'},svg);txt(P.l-8,yy+4,view==='indexed'?v.toFixed(0):v.toFixed(2),'#6c757d',11,'end',svg)}
+  const line=(arr,color,width)=>{const pts=arr.map((v,p)=>v!=null?[x(p),y(v)]:null).filter(Boolean);poly(pts,svg,color,width)};
+  line(ma200,'#7c3aed',2);line(ma50,'#dc2626',1.8);line(values,'#1565c0',2.2);
+  const step=Math.max(1,Math.floor(idx.length/7));for(let p=0;p<idx.length;p+=step){const dt=dates[idx[p]];txt(x(p),H-P.b+18,dt.slice(0,7),'#6c757d',10,'middle',svg)}
+  const last=values.at(-1),first=values[0],ret=(raw.at(-1)/raw[0]-1)*100,peak=Math.max(...raw),dd=(raw.at(-1)/peak-1)*100;
+  document.getElementById('etpChartStats').textContent=` ${dates[idx[0]]} → ${dates[idx.at(-1)]} · variazione periodo ${ret>=0?'+':''}${ret.toFixed(1)}% · drawdown da massimo ${dd.toFixed(1)}%`;
+  document.getElementById('etpPriceChart').innerHTML='';document.getElementById('etpPriceChart').appendChild(svg);
+ };
+ ['etpRange','etpView'].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=draw});draw();
 }
 
 // ── EXCEL ────────────────────────────────────────────────────────────────────
