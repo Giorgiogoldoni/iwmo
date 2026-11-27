@@ -52,32 +52,57 @@ def compare(old,new):
 def yahoo_ticker(t): return (t or "").strip().replace(" ","-")
 
 def momentum_for(tickers):
- """Yahoo proxy: 6m/12m adjusted returns and annualized volatility; not MSCI official score."""
+ """Approximate MSCI-style momentum components on current holdings only.
+ Uses 6/12m returns excluding latest month and 3y weekly volatility.
+ Risk-free adjustment and parent-index universe z-scoring are unavailable; not official MSCI score.
+ """
  result={}
  try:
+  import numpy as np
   import yfinance as yf
   symbols=list(dict.fromkeys(yahoo_ticker(t) for t in tickers if t))
-  data=yf.download(symbols,period="2y",interval="1d",auto_adjust=True,group_by="ticker",threads=True,progress=False)
+  data=yf.download(symbols,period="5y",interval="1d",auto_adjust=True,group_by="ticker",threads=True,progress=False)
   if data.empty:return result
+  raw={}
   for sym in symbols:
    try:
     close=data[sym]["Close"].dropna() if len(symbols)>1 else data["Close"].dropna()
-    if len(close)<190:continue
-    r6=float(close.iloc[-1]/close.iloc[-126]-1) if len(close)>=126 else None
-    r12=float(close.iloc[-1]/close.iloc[-252]-1) if len(close)>=252 else None
-    daily=close.pct_change().dropna();vol=float(daily.iloc[-252:].std()*252**0.5) if len(daily)>=200 else None
-    composite=(0.5*r6+0.5*r12) if r6 is not None and r12 is not None else None
-    score=composite/vol if composite is not None and vol and vol>0 else None
-    result[sym]={"momentum_6m_pct":round(r6*100,2) if r6 is not None else None,"momentum_12m_pct":round(r12*100,2) if r12 is not None else None,"volatility_12m_pct":round(vol*100,2) if vol is not None else None,"momentum_proxy":round(score,4) if score is not None else None,"momentum_data_date":str(close.index[-1].date())}
+    if len(close)<300:continue
+    endp=close.iloc[-22] # approximately T-1 month
+    p6=close.iloc[-148] if len(close)>=148 else None
+    p12=close.iloc[-274] if len(close)>=274 else None
+    ret6=float(endp/p6-1) if p6 is not None else None
+    ret12=float(endp/p12-1) if p12 is not None else None
+    weekly=close.resample("W-FRI").last().dropna().pct_change().dropna()
+    vol3=float(weekly.iloc[-156:].std()*52**0.5) if len(weekly)>=130 else None
+    ra6=ret6/vol3 if ret6 is not None and vol3 and vol3>0 else None
+    ra12=ret12/vol3 if ret12 is not None and vol3 and vol3>0 else None
+    raw[sym]={"momentum_6m_pct":round(ret6*100,2) if ret6 is not None else None,
+     "momentum_12m_pct":round(ret12*100,2) if ret12 is not None else None,
+     "volatility_3y_weekly_pct":round(vol3*100,2) if vol3 is not None else None,
+     "risk_adjusted_6m":ra6,"risk_adjusted_12m":ra12,"momentum_data_date":str(close.index[-22].date())}
    except Exception:continue
- except Exception as e: print("Momentum fetch unavailable:",repr(e))
+  def zvals(field):
+   vals={k:v[field] for k,v in raw.items() if v.get(field) is not None}
+   if len(vals)<2:return {k:0.0 for k in vals}
+   mean=float(np.mean(list(vals.values())));std=float(np.std(list(vals.values()),ddof=0))
+   return {k:((v-mean)/std if std else 0.0) for k,v in vals.items()}
+  z6=zvals("risk_adjusted_6m");z12=zvals("risk_adjusted_12m")
+  combined={k:0.5*z6.get(k,0)+0.5*z12.get(k,0) for k in raw if k in z6 or k in z12}
+  if combined:
+   mean=float(np.mean(list(combined.values())));std=float(np.std(list(combined.values()),ddof=0))
+   for k,v in combined.items():
+    z=max(-3,min(3,(v-mean)/std if std else 0));score=1+z if z>0 else 1/(1-z)
+    raw[k].update({"momentum_z":round(z,4),"momentum_proxy":round(score,4)})
+  result=raw
+ except Exception as e:print("Momentum fetch unavailable:",repr(e))
  return result
 
 def write_workbook(snapshot,snapshots,mom):
  import pandas as pd
  current=pd.DataFrame(snapshot["holdings"])
  current["yahoo_symbol"]=current["ticker"].map(yahoo_ticker)
- for field in ["momentum_6m_pct","momentum_12m_pct","volatility_12m_pct","momentum_proxy","momentum_data_date"]:
+ for field in ["momentum_6m_pct","momentum_12m_pct","volatility_3y_weekly_pct","momentum_z","momentum_proxy","momentum_data_date"]:
   current[field]=current["yahoo_symbol"].map(lambda s:mom.get(s,{}).get(field))
  current["momentum_rank"]=current["momentum_proxy"].rank(ascending=False,method="min")
  ch=snapshot.get("changes",{})
