@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IWMO — Portfolio Monitor</title>
+<style>
+:root{--ink:#17212b;--muted:#667586;--line:#dce3e9;--blue:#1262a3;--green:#198754;--red:#c0392b;--bg:#f4f7fa}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:#12161a;color:#fff;padding:18px 22px;border-bottom:4px solid var(--blue);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}header a{color:#d8eaff;margin-left:auto}
+main{max-width:1200px;margin:22px auto;padding:0 14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:9px;padding:15px}.label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}.value{font-size:23px;font-weight:700;margin-top:6px}
+section{margin-top:18px;background:white;border:1px solid var(--line);border-radius:9px;padding:15px}h2{font-size:16px;margin:0 0 12px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}th{background:#f5f8fb;position:sticky;top:0}td.num{text-align:right;font-variant-numeric:tabular-nums}.up{color:var(--green)}.down{color:var(--red)}.tag{padding:3px 8px;border-radius:20px;background:#e8f4ff;color:var(--blue);font-weight:700}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.toolbar input,.toolbar select{padding:8px;border:1px solid var(--line);border-radius:6px}
+.scroll{overflow:auto;max-height:70vh}.note{color:var(--muted);font-size:12px;line-height:1.5}
+</style></head>
+<body><header><h1>📊 IWMO — Monitor del portafoglio BlackRock</h1><a href="./index.html">← RAPTOR IWMO</a></header>
+<main><div id="status" class="card">Caricamento snapshot…</div><div class="grid" id="kpis"></div>
+<section><h2>Variazioni effettive tra snapshot</h2><p class="note">Una variazione di peso non implica un acquisto/vendita. Gli ingressi e le uscite vengono considerati cambiamenti di composizione; i delta dei pesi sono separati e possono riflettere il mercato.</p><div id="changes"></div></section>
+<section><h2>Portafoglio attuale</h2><div class="toolbar"><input id="q" placeholder="Filtra ticker / nome / ISIN"><select id="sort"><option value="weight">Peso decrescente</option><option value="ticker">Ticker A–Z</option><option value="sector">Settore</option></select></div><div class="scroll"><table><thead><tr><th>Ticker</th><th>Titolo</th><th>Settore</th><th>ISIN</th><th class="num">Peso %</th><th class="num">Quantità</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<p class="note">Fonte: CSV holdings ufficiale iShares/BlackRock. Snapshot archiviati in <a href="https://github.com/Giorgiogoldoni/iwmo/tree/main/holdings/snapshots">GitHub</a>. Dati pubblicati secondo disponibilità della fonte, non necessariamente intraday.</main>
+<script>
+let data;
+const fmt=(n,d=2)=>Number(n||0).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d});
+function render(){
+ const h=data.holdings||[], c=data.changes||{};
+ document.getElementById('status').innerHTML='Snapshot: <b>'+new Date(data.downloaded_at).toLocaleString('it-IT')+'</b> · <span class="tag">'+h.length+' partecipazioni</span> · Fonte: <a href="'+data.source_url+'">BlackRock CSV</a>';
+ document.getElementById('kpis').innerHTML=[['Partecipazioni',h.length],['Ingressi',c.added?.length||0],['Uscite',c.removed?.length||0],['Pesi modificati',c.weight_changes?.length||0]].map(x=>'<div class="card"><div class="label">'+x[0]+'</div><div class="value">'+x[1]+'</div></div>').join('');
+ const table=(arr,kind)=>arr.length?'<div class="scroll"><table><thead><tr>'+ (kind==='weight'?'<th>Titolo</th><th class="num">Prima %</th><th class="num">Ora %</th><th class="num">Delta pp</th>':'<th>Ticker</th><th>Nome</th><th class="num">Peso %</th>')+'</tr></thead><tbody>'+arr.map(r=>kind==='weight'?'<tr><td>'+r.ticker+' — '+r.name+'</td><td class="num">'+fmt(r.old_weight)+'</td><td class="num">'+fmt(r.new_weight)+'</td><td class="num '+(r.delta_pp>0?'up':'down')+'">'+(r.delta_pp>0?'+':'')+fmt(r.delta_pp)+'</td>':'<tr><td>'+r.ticker+'</td><td>'+r.name+'</td><td class="num">'+fmt(r.weight)+'</td>').join('')+'</tbody></table></div>':'<p class="note">Nessuna variazione.</p>';
+ document.getElementById('changes').innerHTML='<h3>Nuovi titoli</h3>'+table(c.added||[],'add')+'<h3>Titoli usciti</h3>'+table(c.removed||[],'remove')+'<h3>Variazioni di peso ≥ 0,01 punti</h3>'+table(c.weight_changes||[],'weight');
+ function draw(){let arr=h.filter(r=>[r.ticker,r.name,r.ISIN,r.Sector].join(' ').toLowerCase().includes(document.getElementById('q').value.toLowerCase()));const sort=document.getElementById('sort').value;arr.sort(sort==='ticker'?(a,b)=>a.ticker.localeCompare(b.ticker):sort==='sector'?(a,b)=>(a.Sector||'').localeCompare(b.Sector||''): (a,b)=>(b.weight_pct||0)-(a.weight_pct||0));document.getElementById('rows').innerHTML=arr.map(r=>'<tr><td><b>'+r.ticker+'</b></td><td>'+r.name+'</td><td>'+r.Sector+'</td><td>'+r.ISIN+'</td><td class="num">'+fmt(r.weight_pct)+'</td><td class="num">'+r.Nominal+'</td></tr>').join('')}
+ document.getElementById('q').oninput=draw;document.getElementById('sort').onchange=draw;draw();
+}
+fetch('./holdings/latest.json?t='+Date.now()).then(r=>{if(!r.ok)throw Error('Snapshot ancora non pubblicato (workflow non ha completato il primo download).');return r.json()}).then(x=>{data=x;render()}).catch(e=>document.getElementById('status').textContent=e.message);
+</script></body></html>
