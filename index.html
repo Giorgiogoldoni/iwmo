@@ -322,7 +322,7 @@ function renderStagionalita() {
     {l:'Mese corrente',v:curr.nome,s:`media ${(curr.avg_ret||0)>0?'+':''}${curr.avg_ret}% · win ${curr.win_rate}% · n=${curr.n_anni}`,c:'iwmo'},
     {l:'Media migliore',v:best.nome,s:`+${best.avg_ret}% · mediana ${best.median_ret??'—'}% · win ${best.win_rate}%`,c:'green'},
     {l:'Media peggiore',v:worst.nome,s:`${worst.avg_ret}% · mediana ${worst.median_ret??'—'}% · win ${worst.win_rate}%`,c:'red'},
-    {l:'Campione',v:'~12 anni',s:'rendimenti mensili (non giornalieri) · ${sampleTotal} osservazioni',c:''},
+    {l:'Campione',v:'~12 anni',s:`rendimenti mensili (non giornalieri) · ${sampleTotal} osservazioni`,c:''},
   ].map(k=>`<div class="kpi"><div class="kl">${k.l}</div><div class="kv ${k.c}">${k.v}</div><div class="ks2">${k.s}</div></div>`).join('');
 
   const W=900,H=310,P={l:58,r:22,t:22,b:45},PW=W-P.l-P.r,PH=H-P.t-P.b;
