@@ -145,6 +145,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-si
     <span id="etpChartStats" class="chart-label"></span>
   </div>
   <div id="kamal5Stats" class="kpi-row" style="margin:8px 12px"></div>
+  <div id="kamal5Compare" style="margin:10px 12px;padding:12px;border:1px solid var(--border);border-radius:10px">
+    <div style="font-weight:700;margin-bottom:8px">KAMAL 5 — Backtest long-only vs Buy &amp; Hold</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Segnale alla chiusura; rendimento applicato dalla barra successiva. BUY entra, SELL torna in liquidità. Nessuna commissione, spread o imposta.</div>
+    <div id="kamal5Table"></div>
+    <label style="display:inline-flex;align-items:center;gap:6px;margin:10px 0">Grafico periodo <select id="kamal5Period"><option value="6">6 mesi</option><option value="12">12 mesi</option><option value="36" selected>36 mesi</option></select></label>
+    <div id="kamal5Equity" style="width:100%;height:230px"></div>
+  </div>
   <div class="chart-wrap">
     <div class="chart-label">Prezzo di chiusura (blu) · SMA 50 (rosso) · SMA 200 (viola) · segnali Kamal 5 BIGCHATGPT: ▲ BUY breakout 5 barre · ▼ SELL/uscita</div>
     <div id="etpPriceChart"></div>
@@ -668,7 +675,40 @@ function renderIwmoRRG(){
  txt(W/2,H-12,'RS-Ratio (forza relativa)','#495057',12,'middle',svg);txt(18,H/2,'RS-Momentum',' #495057',12,'middle',svg);
  box.innerHTML='';box.appendChild(svg);box.insertAdjacentHTML('beforeend',`<div class="chart-label">Ultimo punto: ${last.x.toFixed(1)} / ${last.y.toFixed(1)} · rispetto SWDA · RRG indicativo calcolato su dati settimanali</div>`);
 }
-\nfunction renderKamal5Stats(etp){
+\nfunction renderKamal5Comparison(etp){
+ const d=etp.dates||[],c=etp.closes||[],h=etp.highs||[],l=etp.lows||[];
+ const valid=[];for(let i=0;i<d.length;i++)if(Number.isFinite(+c[i])&&Number.isFinite(+h[i])&&Number.isFinite(+l[i]))valid.push(i);
+ if(valid.length<10)return;
+ const calc=(months)=>{
+  const end=valid.at(-1),endDate=new Date(d[end]),target=new Date(endDate);target.setMonth(target.getMonth()-months);
+  let start=valid.find(i=>new Date(d[i])>=target);if(start==null)start=valid[0];
+  let long=false,eq=1,bh=1,peakS=1,peakB=1,ddS=0,ddB=0,exposed=0,closed=[],entry=null;
+  const strat=[{i:start,v:100}],hold=[{i:start,v:100}];
+  for(let q=1;q<valid.length;q++){const i=valid[q],p=valid[q-1];if(i<=start)continue;
+    const r=+c[i]/+c[p]-1;bh*=1+r;
+    if(long){eq*=1+r;exposed++;}peakS=Math.max(peakS,eq);ddS=Math.min(ddS,eq/peakS-1);
+    peakB=Math.max(peakB,bh);ddB=Math.min(ddB,bh/peakB-1);
+    strat.push({i,v:eq*100});hold.push({i,v:bh*100});
+    if(i>=5){let hh=-Infinity,ll=Infinity;for(let z=i-5;z<i;z++){hh=Math.max(hh,+h[z]);ll=Math.min(ll,+l[z]);}
+      if(+c[i]>hh&&!long){long=true;entry={price:+c[i],date:d[i]};}
+      else if(+c[i]<ll&&long){closed.push({entry,exit:d[i],pct:(+c[i]/entry.price-1)*100});long=false;entry=null;}
+    }
+  }
+  if(long&&entry)closed.push({entry,exit:d[end],pct:(+c[end]/entry.price-1)*100,open:true});
+  return {months,start,end,ret:(eq-1)*100,bh:(bh-1)*100,ddS:ddS*100,ddB:ddB*100,exposure:exposed/(valid.filter(i=>i>start).length||1)*100,closed,win:closed.length?closed.filter(t=>t.pct>0).length/closed.length*100:0,strat,hold};
+ };
+ const fmt=x=>(x>=0?"+":"")+x.toFixed(2)+"%";
+ const results=[6,12,36].map(calc);
+ document.getElementById("kamal5Table").innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:5px">Periodo</th><th>Kamal5</th><th>Buy&amp;Hold</th><th>Diff.</th><th>DD K5</th><th>DD B&amp;H</th><th>Trades</th><th>Win%</th><th>In cash</th></tr></thead><tbody>'+results.map(r=>'<tr><td style="padding:5px;border-top:1px solid var(--border)">'+r.months+'m</td><td>'+fmt(r.ret)+'</td><td>'+fmt(r.bh)+'</td><td style="font-weight:700;color:'+(r.ret-r.bh>=0?'#198754':'#dc3545')+'">'+fmt(r.ret-r.bh)+'</td><td>'+fmt(r.ddS)+'</td><td>'+fmt(r.ddB)+'</td><td>'+r.closed.length+'</td><td>'+r.win.toFixed(0)+'%</td><td>'+(100-r.exposure).toFixed(0)+'%</td></tr>').join("")+'</tbody></table>';
+ const draw=()=>{const r=calc(+document.getElementById("kamal5Period").value),el=document.getElementById("kamal5Equity");if(!el)return;
+  const W=el.clientWidth||600,H=220,pad=28,all=r.strat.concat(r.hold).map(x=>x.v),min=Math.min(...all),max=Math.max(...all),range=max-min||1;
+  const x=(q)=>pad+q/(r.strat.length-1)*(W-pad*2),y=(v)=>H-pad-(v-min)/range*(H-pad*2);
+  const path=a=>a.map((v,q)=>(q?"L":"M")+x(q).toFixed(1)+","+y(v.v).toFixed(1)).join(" ");
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'"><line x1="'+pad+'" x2="'+(W-pad)+'" y1="'+y(100)+'" y2="'+y(100)+'" stroke="var(--border)" stroke-dasharray="4 4"/><path d="'+path(r.hold)+'" fill="none" stroke="#64748b" stroke-width="2"/><path d="'+path(r.strat)+'" fill="none" stroke="#0f766e" stroke-width="2.5"/><text x="'+pad+'" y="14" font-size="11" fill="var(--text2)">Base 100 · Kamal5 '+fmt(r.ret)+' · B&amp;H '+fmt(r.bh)+'</text><text x="'+pad+'" y="'+(H-5)+'" font-size="10" fill="var(--text2)">'+d[r.start]+'</text><text x="'+(W-pad)+'" y="'+(H-5)+'" text-anchor="end" font-size="10" fill="var(--text2)">'+d[r.end]+'</text></svg><div style="font-size:11px;color:var(--text2);display:flex;gap:14px"><span style="color:#0f766e">● Kamal5</span><span style="color:#64748b">● Buy &amp; Hold</span></div>';
+ };
+ document.getElementById("kamal5Period").onchange=draw;draw();
+}
+function renderKamal5Stats(etp){renderKamal5Comparison(etp);
  const s=etp.kamal5_stats||{}, box=document.getElementById('kamal5Stats');if(!box)return;
  const sig=s.last_signal||'—',ret=s.total_return_pct,bh=s.buyhold_pct;
  const cards=[
