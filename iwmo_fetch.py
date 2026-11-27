@@ -297,7 +297,7 @@ def main():
         stagionalita = calc_stagionalita(etp_closes, etp_dates)
 
         # Forza relativa vs benchmark (sostituisce Antonacci)
-        rel_strength = calc_relative_strength(etp_closes, etp_dates, bench_closes, bench_dates)
+        rel_strength = calc_relative_strength(etp_closes, etp_dates, bench_closes, bench_dates, with_series=True)
         rel_strength_value = calc_relative_strength(etp_closes, etp_dates, value_closes, value_dates, with_series=True)
 
         # Indicatori RAPTOR su ETF
@@ -331,6 +331,7 @@ def main():
                 'lows':      etp_lows,
                 'volumes':   etp_volumes,
                 'kama_fast': fmt(etp_kama_fast),
+                'kama5': fmt(etp_kama_fast),
                 'kama_slow': fmt(etp_kama_slow),
                 'rsi14':     fmt(etp_rsi14),
                 'rsi5':      fmt(etp_rsi5),
@@ -403,6 +404,7 @@ def main():
         output['etp']['lows'] = etp_lows
         output['etp']['volumes'] = etp_volumes
         output['etp']['kama_fast'] = fmt(etp_kama_fast)
+        output['etp']['kama5'] = fmt(etp_kama_fast)
         output['etp']['kama_slow'] = fmt(etp_kama_slow)
         output['etp']['rsi14'] = fmt(etp_rsi14)
         output['etp']['rsi5'] = fmt(etp_rsi5)
