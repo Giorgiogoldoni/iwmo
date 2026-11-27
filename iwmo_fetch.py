@@ -209,6 +209,7 @@ def main():
 
     if hasattr(etp.columns, 'levels'):
         etp.columns = etp.columns.get_level_values(0)
+    etp = etp.dropna(subset=['Close','High','Low'])  # eliminate incomplete Yahoo daily bars
 
     etp_closes  = [round(float(c),4) for c in etp['Close'].tolist()]
     etp_highs   = [round(float(c),4) for c in etp['High'].tolist()]
@@ -223,6 +224,7 @@ def main():
                          auto_adjust=True, progress=False)
     if hasattr(bench.columns, 'levels'):
         bench.columns = bench.columns.get_level_values(0)
+    bench = bench.dropna(subset=['Close'])
     bench_closes = [round(float(c),4) for c in bench['Close'].tolist()]
     bench_dates  = [ts.strftime('%Y-%m-%d') for ts in bench.index]
 
@@ -232,6 +234,7 @@ def main():
                          auto_adjust=True, progress=False)
     if hasattr(value.columns, 'levels'):
         value.columns = value.columns.get_level_values(0)
+    value = value.dropna(subset=['Close'])
     value_closes = [round(float(c),4) for c in value['Close'].tolist()]
     value_dates  = [ts.strftime('%Y-%m-%d') for ts in value.index]
 
