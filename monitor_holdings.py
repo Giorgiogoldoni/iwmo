@@ -6,8 +6,9 @@ from pathlib import Path
 import requests
 
 URLS=[
- "https://www.blackrock.com/uk/professionals/en/products/270051/ishares-edge-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
- "https://www.blackrock.com/uk/individual/en/products/270051/ishares-edge-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
+ "https://www.ishares.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
+ "https://www.ishares.com/it/investitori-privati/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
+ "https://www.blackrock.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
 ]
 HEADERS={"User-Agent":"Mozilla/5.0 (compatible; IWMO-Holdings-Monitor/1.0)","Accept":"text/csv,*/*"}
 ROOT=Path("holdings"); SNAP=ROOT/"snapshots"; RAW=ROOT/"raw_csv"
@@ -17,21 +18,21 @@ def get_csv():
  for url in URLS:
   try:
    r=requests.get(url,headers=HEADERS,timeout=45);r.raise_for_status()
-   if "html" in r.headers.get("content-type","").lower() or "Issuer Ticker" not in r.text: raise ValueError("not recognized holdings CSV")
+   if "html" in r.headers.get("content-type","").lower() or not any(x in r.text for x in ["Weight (%)","Weight","Ticker"]): raise ValueError("not recognized holdings CSV")
    return r.text,url
   except Exception as e: errors.append(f"{url}: {e}")
  raise RuntimeError("Cannot fetch BlackRock holdings CSV: "+"; ".join(errors))
 
 def parse(text):
- lines=text.splitlines(); hidx=next((i for i,l in enumerate(lines) if "Issuer Ticker" in l and "Weight (%)" in l),None)
+ lines=text.splitlines(); hidx=next((i for i,l in enumerate(lines) if ("Issuer Ticker" in l or "Ticker" in l) and ("Weight (%)" in l or "Weight" in l)),None)
  if hidx is None: raise ValueError("CSV header missing")
  rows=[]
  for raw in csv.DictReader(io.StringIO("\n".join(lines[hidx:]))):
   if not raw or not raw.get("Issuer Ticker"): continue
   row={k:(v or "").strip().strip('"') for k,v in raw.items() if k}
-  ticker=row.get("Issuer Ticker","")
+  ticker=row.get("Issuer Ticker") or row.get("Ticker") or row.get("Symbol") or ""
   if ticker.lower().startswith(("total","fund")): continue
-  try: row["weight_pct"]=float(row.get("Weight (%)","").replace(",",""))
+  try: row["weight_pct"]=float((row.get("Weight (%)") or row.get("Weight") or row.get("Portfolio Weight") or "").replace(",",""))
   except: row["weight_pct"]=None
   row.update(ticker=ticker,name=row.get("Name",""),isin=row.get("ISIN",""))
   rows.append(row)
