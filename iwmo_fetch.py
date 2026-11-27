@@ -108,27 +108,34 @@ def sanitize(obj):
 
 # ── STAGIONALITÀ 25 ANNI / STORICA ────────────────────
 def calc_stagionalita(closes, dates):
-    """Rendimento medio mensile storico"""
+    """Stagionalità corretta: rendimenti mese-su-mese per ciascun anno,
+    non media dei rendimenti giornalieri (che gonfia il campione)."""
+    month_end = {}
+    for close, date in zip(closes, dates):
+        if close is not None and date:
+            month_end[date[:7]] = close  # ultimo close disponibile nel mese
     monthly_rets = defaultdict(list)
-    for i in range(1, len(closes)):
-        if closes[i] and closes[i-1]:
-            month = int(dates[i][5:7])
-            ret = (closes[i]-closes[i-1])/closes[i-1]*100
-            monthly_rets[month].append(ret)
+    for key, close in sorted(month_end.items()):
+        year, month = map(int, key.split('-'))
+        prev_key = f'{year-1}-12' if month == 1 else f'{year}-{month-1:02d}'
+        prev_close = month_end.get(prev_key)
+        if prev_close:
+            monthly_rets[month].append((close / prev_close - 1) * 100)
 
     stagionalita = []
     mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
     for m in range(1,13):
         rets = monthly_rets[m]
         avg = sum(rets)/len(rets) if rets else 0
+        ordered = sorted(rets)
+        median = (ordered[len(ordered)//2] if len(ordered)%2 else
+                  (ordered[len(ordered)//2-1]+ordered[len(ordered)//2])/2) if ordered else 0
         positive = sum(1 for r in rets if r>0)
-        wr = positive/len(rets)*100 if rets else 0
         stagionalita.append({
-            'mese': m,
-            'nome': mesi[m-1],
-            'avg_ret': round(avg,3),
-            'win_rate': round(wr,1),
-            'n_anni': len(rets)
+            'mese': m, 'nome': mesi[m-1],
+            'avg_ret': round(avg,2), 'median_ret': round(median,2),
+            'win_rate': round(positive/len(rets)*100,1) if rets else 0,
+            'n_anni': len(rets), 'returns': [round(r,2) for r in rets]
         })
     return stagionalita
 
