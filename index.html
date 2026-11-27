@@ -690,7 +690,7 @@ function renderIwmoRRG(){
  const kama=(arr,n,fast=2,slow=30)=>{const out=Array(arr.length).fill(null),f=2/(fast+1),s=2/(slow+1);if(arr.length<=n)return out;out[n]=arr[n];for(let i=n+1;i<arr.length;i++){let ch=Math.abs(arr[i]-arr[i-n]),vol=0;for(let j=i-n+1;j<=i;j++)vol+=Math.abs(arr[j]-arr[j-1]);let er=vol?ch/vol:0,sc=Math.pow(er*(f-s)+s,2);out[i]=out[i-1]+sc*(arr[i]-out[i-1]);}return out;};
  const src=valid.map(i=>(+hi[i]+ +lo[i]+2*+cl[i])/4),ks=[];for(let p=5;p<=90;p+=5)ks.push(kama(src,p));ks.push(kama(src,100));
  const k100=kama(C,100),dist=Array(N).fill(null),line2=Array(N).fill(null),line3=Array(N).fill(null),width=Array(N).fill(null);
- for(let i=0;i<N;i++){if(ks.some(k=>k[i]==null)||k100[i]==null)continue;let sum=0;for(let j=0;j<ks.length-1;j++)sum+=(ks[j][i]-ks[j+1][i])/ks[j+1][i];dist[i]=sum/(ks.length-1);line2[i]=k100[i]*(1+10*dist[i]);width[i]=Math.max(...ks.map(k=>k[i]))-Math.min(...ks.map(k=>k[i]);}
+ for(let i=0;i<N;i++){if(ks.some(k=>k[i]==null)||k100[i]==null)continue;let sum=0;for(let j=0;j<ks.length-1;j++)sum+=(ks[j][i]-ks[j+1][i])/ks[j+1][i];dist[i]=sum/(ks.length-1);line2[i]=k100[i]*(1+10*dist[i]);width[i]=Math.max(...ks.map(k=>k[i]))-Math.min(...ks.map(k=>k[i]));}
  const f=line2.findIndex(v=>v!=null);if(f>=0)kama(line2.slice(f),10).forEach((v,j)=>line3[f+j]=v);
  const tr=C.map((v,i)=>i?Math.max(H[i]-L[i],Math.abs(H[i]-C[i-1]),Math.abs(L[i]-C[i-1])):H[i]-L[i]),atr=Array(N).fill(null);for(let i=13;i<N;i++)atr[i]=tr.slice(i-13,i+1).reduce((x,y)=>x+y,0)/14;
  const wn=width.map((v,i)=>atr[i]?v/atr[i]:null),wp=Array(N).fill(null);for(let i=100;i<N;i++){const hist=wn.slice(i-100,i).filter(Number.isFinite);if(hist.length>=60&&Number.isFinite(wn[i]))wp[i]=hist.filter(v=>v<=wn[i]).length/hist.length;}
