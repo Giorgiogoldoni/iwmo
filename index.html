@@ -690,7 +690,7 @@ function dlExcel(){
       'AO': etp.ao?.[i], 'SAR': etp.sar?.[i], 'ER': etp.er?.[i], 'Segnale': etp.signals?.[i],
     });
   }
-  const stagRows = (D.stagionalita||[]).map(s=>({'Mese':s.nome,'Rend. medio %':s.avg_ret,'Win rate %':s.win_rate,'N. anni':s.n_anni}));
+  const stagRows = (D.stagionalita||[]).map(s=>({'Mese':s.nome,'Rend. medio %':s.avg_ret,'Rend. mediano %':s.median_ret,'Win rate %':s.win_rate,'N. mesi/anni':s.n_anni,'Rendimenti annuali %':(s.returns||[]).join(', ')}));
   const supRows = (D.etp_supports||[]).map(s=>({'Prezzo':s.price,'Data':s.date,'Tocchi':s.touches}));
   const rs = D.rel_strength || {};
   const rv = D.rel_strength_value || {};
