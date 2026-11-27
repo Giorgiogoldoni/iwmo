@@ -71,7 +71,11 @@ def get_csv():
    if "<html" in r.text[:500].lower() or not any(x in r.text for x in ["Weight (%)","Weight","Ticker"]): raise ValueError("not recognized holdings CSV")
    return r.text,url
   except Exception as e: errors.append(f"{url}: {e}")
- raise RuntimeError("Cannot fetch iShares holdings: JSON API and CSV endpoints failed; "+"; ".join(errors))
+ fallback=rebalix_csv()
+ if fallback:
+  print("Using monthly Rebalix holdings archive as fallback source")
+  return fallback
+ raise RuntimeError("Cannot fetch holdings: official BlackRock endpoints and Rebalix fallback failed; "+"; ".join(errors))
 def parse(text):
  lines=text.splitlines(); hidx=next((i for i,l in enumerate(lines) if ("Issuer Ticker" in l or "Ticker" in l) and ("Weight (%)" in l or "Weight" in l)),None)
  if hidx is None: raise ValueError("CSV header missing")
@@ -159,7 +163,7 @@ def write_workbook(snapshot,snapshots,mom):
  hist=[{"date":s.get("downloaded_at","")[:10],"ticker":r.get("ticker"),"isin":r.get("isin"),"name":r.get("name"),"weight_pct":r.get("weight_pct"),"sector":r.get("Sector")} for s in snapshots for r in s.get("holdings",[])]
  hist=pd.DataFrame(hist)
  pivot=hist.pivot_table(index=["ticker","isin","name"],columns="date",values="weight_pct",aggfunc="last").reset_index() if not hist.empty else pd.DataFrame()
- method=pd.DataFrame([["Source","Official BlackRock/iShares CSV"],["6m momentum","Adjusted price return approx 126 sessions"],["12m momentum","Adjusted price return approx 252 sessions"],["Volatility","Annualized trailing daily-return standard deviation approx 252 sessions"],["Proxy score","Mean of 6m and 12m returns divided by annualized volatility; NOT official MSCI score"],["Universe","Only current holdings, not full parent index universe; cannot verify inclusion decisions"],["Limitations","Yahoo ticker matching, missing series and cross-currency effects; proxy does not replicate MSCI official calculation"],["Snapshot",snapshot.get("downloaded_at","")]],columns=["Item","Definition / limitation"])
+ method=pd.DataFrame([["Source","BlackRock/iShares official CSV when available; Rebalix monthly archive fallback"],["6m momentum","Adjusted price return approx 126 sessions"],["12m momentum","Adjusted price return approx 252 sessions"],["Volatility","Annualized trailing daily-return standard deviation approx 252 sessions"],["Proxy score","Mean of 6m and 12m returns divided by annualized volatility; NOT official MSCI score"],["Universe","Only current holdings, not full parent index universe; cannot verify inclusion decisions"],["Limitations","Yahoo ticker matching, missing series and cross-currency effects; proxy does not replicate MSCI official calculation"],["Snapshot",snapshot.get("downloaded_at","")]],columns=["Item","Definition / limitation"])
  out=ROOT/"IWMO_holdings_history.xlsx"
  with pd.ExcelWriter(out,engine="openpyxl") as w:
   current.to_excel(w,index=False,sheet_name="Current holdings")
