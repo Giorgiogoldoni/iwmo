@@ -6,23 +6,42 @@ from pathlib import Path
 import requests
 
 URLS=[
- "https://www.ishares.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
- "https://www.ishares.com/it/investitori-privati/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
- "https://www.blackrock.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf/latest-holdings.csv",
+ "https://www.ishares.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf-iwmo/latest-holdings.csv",
+ "https://www.blackrock.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf-iwmo/latest-holdings.csv",
 ]
-HEADERS={"User-Agent":"Mozilla/5.0 (compatible; IWMO-Holdings-Monitor/1.0)","Accept":"text/csv,*/*"}
+API_URL="https://www.ishares.com/varnish-api/blk-one01-product-data/product-data/api/v2/get-product-data"
+HEADERS={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36","Accept":"text/csv,application/json,*/*","Referer":"https://www.ishares.com/uk/individual/en/products/270051/ishares-msci-world-momentum-factor-ucits-etf-iwmo"}
 ROOT=Path("holdings"); SNAP=ROOT/"snapshots"; RAW=ROOT/"raw_csv"
+
+def api_csv():
+ # BlackRock's current product-data JSON plane; fallback IDs are product ID and known fund portfolio IDs.
+ for pid in ("270051","270050","270052"):
+  params={"appSubType":"ISHARES","appType":"PRODUCT_PAGE","component":"holdings.all","locale":"en_US","portfolioId":pid,"targetSite":"uk-ishares","userType":"individual","excludeContent":"true"}
+  try:
+   r=requests.get(API_URL,params=params,headers=HEADERS,timeout=40);r.raise_for_status(); j=r.json()
+   dp=j.get("componentsByNameMap",{}).get("holdings",{}).get("containersByNameMap",{}).get("all",{}).get("dataPointsByNameMap",{})
+   cols={"Issuer Ticker":"ticker","Name":"issueName","Sector":"sectorName","Asset Class":"assetClass","Market Value":"marketValue","Weight (%)":"holdingPercent","Notional Value":"notionalValue","Nominal":"unitsHeld","ISIN":"isin","Market Currency":"currencyCode"}
+   rows=[]
+   n=max((len(dp.get(src,{}).get("value",[])) for src in cols.values()),default=0)
+   if n<100: continue
+   for i in range(n):
+    rows.append({dst:(dp.get(src,{}).get("value",[])[i] if i<len(dp.get(src,{}).get("value",[])) else "") for dst,src in cols.items()})
+   buf=io.StringIO();w=csv.DictWriter(buf,fieldnames=list(cols));w.writeheader();w.writerows(rows)
+   return buf.getvalue(),r.url
+  except Exception as e: print("API attempt",pid,"failed:",e)
+ return None
 
 def get_csv():
  errors=[]
+ api=api_csv()
+ if api:return api
  for url in URLS:
   try:
    r=requests.get(url,headers=HEADERS,timeout=45);r.raise_for_status()
-   if "html" in r.headers.get("content-type","").lower() or not any(x in r.text for x in ["Weight (%)","Weight","Ticker"]): raise ValueError("not recognized holdings CSV")
+   if "<html" in r.text[:500].lower() or not any(x in r.text for x in ["Weight (%)","Weight","Ticker"]): raise ValueError("not recognized holdings CSV")
    return r.text,url
   except Exception as e: errors.append(f"{url}: {e}")
- raise RuntimeError("Cannot fetch BlackRock holdings CSV: "+"; ".join(errors))
-
+ raise RuntimeError("Cannot fetch iShares holdings: JSON API and CSV endpoints failed; "+"; ".join(errors))
 def parse(text):
  lines=text.splitlines(); hidx=next((i for i,l in enumerate(lines) if ("Issuer Ticker" in l or "Ticker" in l) and ("Weight (%)" in l or "Weight" in l)),None)
  if hidx is None: raise ValueError("CSV header missing")
