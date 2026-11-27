@@ -31,6 +31,36 @@ def api_csv():
   except Exception as e: print("API attempt",pid,"failed:",e)
  return None
 
+def rebalix_csv():
+ try:
+  import pandas as pd
+  url="https://rebalix.com/api/etf/composizione?isin=IE00BP3QZ825&lang=en"
+  r=requests.get(url,headers=HEADERS,timeout=60);r.raise_for_status()
+  if not r.content.startswith(b"PK"): raise ValueError("Rebalix download did not return XLSX")
+  x=pd.read_excel(io.BytesIO(r.content),sheet_name=0,header=None)
+  # Detect the real column-header row (download contains a short metadata block).
+  header_row=None
+  for i in range(min(12,len(x))):
+   vals=[str(v).strip().lower() for v in x.iloc[i].tolist()]
+   if any("ticker" in v or "symbol" in v for v in vals) and any("weight" in v or "percent" in v or "%" in v for v in vals):
+    header_row=i;break
+  if header_row is None: raise ValueError("Unable to identify holdings columns in XLSX")
+  df=pd.read_excel(io.BytesIO(r.content),sheet_name=0,header=header_row)
+  df=df.dropna(how="all")
+  # Keep the third-party source's native fields; normalize recognized fields for parser.
+  cols={str(k).strip():k for k in df.columns}
+  ticker_col=next((k for k in df.columns if any(x in str(k).lower() for x in ["ticker","symbol"])),None)
+  weight_col=next((k for k in df.columns if any(x in str(k).lower() for x in ["weight","percent","%"])),None)
+  name_col=next((k for k in df.columns if any(x in str(k).lower() for x in ["name","company","issuer"])),None)
+  if ticker_col is None or weight_col is None: raise ValueError("XLSX columns not compatible")
+  out=pd.DataFrame({"Issuer Ticker":df[ticker_col].astype(str),"Name":df[name_col].astype(str) if name_col is not None else "", "Weight (%)":df[weight_col]})
+  out=out[out["Issuer Ticker"].str.len().between(1,20)]
+  if len(out)<100: raise ValueError(f"Too few rows in fallback file: {len(out)}")
+  buf=io.StringIO();out.to_csv(buf,index=False)
+  return buf.getvalue(),url
+ except Exception as e:
+  print("Rebalix fallback failed:",repr(e));return None
+
 def get_csv():
  errors=[]
  api=api_csv()
