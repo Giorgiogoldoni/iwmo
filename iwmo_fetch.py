@@ -111,9 +111,10 @@ def calc_stagionalita(closes, dates):
     """Stagionalità corretta: rendimenti mese-su-mese per ciascun anno,
     non media dei rendimenti giornalieri (che gonfia il campione)."""
     month_end = {}
+    current_month = datetime.now().strftime('%Y-%m')  # escludi il mese ancora in corso
     for close, date in zip(closes, dates):
-        if close is not None and date:
-            month_end[date[:7]] = close  # ultimo close disponibile nel mese
+        if close is not None and date and date[:7] != current_month:
+            month_end[date[:7]] = close  # ultimo close del mese completo
     monthly_rets = defaultdict(list)
     for key, close in sorted(month_end.items()):
         year, month = map(int, key.split('-'))
